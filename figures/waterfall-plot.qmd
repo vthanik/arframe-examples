@@ -1,0 +1,94 @@
+---
+title: "Waterfall Plot"
+subtitle: "Best Percentage Change from Baseline in Target Lesion"
+execute:
+  echo: true
+  eval: true
+---
+
+
+```{r}
+#| label: prereqs
+#| include: false
+library(arframe)
+fr_theme(hlines = "header", font_family = "Courier New")
+```
+
+## Setup
+
+See [Prerequisites](../install.qmd) for installation instructions.
+
+```{r}
+#| label: setup
+library(arframe)
+library(ggplot2)
+library(pharmaverseadam)
+library(dplyr, warn.conflicts = FALSE)
+
+arm_levels <- c("Placebo", "Xanomeline Low Dose", "Xanomeline High Dose")
+arm_colors <- c("#1b9e77", "#d95f02", "#7570b3")
+
+# Best % change from baseline per subject (sum of target lesion diameters)
+waterfall_data <- pharmaverseadam::adtr_onco |>
+  filter(PARAMCD == "SDIAM", !is.na(PCHG), ARM != "Screen Failure") |>
+  slice_min(PCHG, by = USUBJID, with_ties = FALSE) |>
+  mutate(ARM = factor(ARM, levels = arm_levels)) |>
+  arrange(PCHG) |>
+  mutate(SUBJ_ORDER = row_number())
+```
+
+
+## Plot Construction
+
+```{r}
+#| label: build-plot
+
+waterfall_plot <- ggplot(
+  waterfall_data,
+  aes(x = reorder(USUBJID, PCHG), y = PCHG, fill = ARM)
+) +
+  geom_col(width = 0.7) +
+  geom_hline(yintercept = -30, linetype = "dashed", color = "red", linewidth = 0.5) +
+  geom_hline(yintercept = 20, linetype = "dashed", color = "blue", linewidth = 0.5) +
+  scale_fill_manual(values = setNames(arm_colors, arm_levels)) +
+  labs(x = "Subject", y = "Best % Change from Baseline", fill = "Treatment") +
+  theme_minimal(base_size = 11) +
+  theme(
+    axis.text.x = element_text(angle = 90, hjust = 1, size = 7),
+    legend.position = "bottom",
+    panel.grid.major.x = element_blank()
+  ) +
+  annotate("text", x = 1, y = -32, label = "PR threshold (-30%)",
+           hjust = 0, size = 3, color = "red") +
+  annotate("text", x = 1, y = 22, label = "PD threshold (20%)",
+           hjust = 0, size = 3, color = "blue")
+```
+
+
+## arframe Pipeline
+
+```{r}
+#| label: pipeline
+#| eval: false
+waterfall_plot |>
+  fr_figure(width = 7, height = 5) |>
+  fr_titles(
+    "Figure 14.2.3",
+    "Waterfall Plot for Best Percentage Change of Target Lesion from Baseline",
+    "Efficacy Population"
+  ) |>
+  fr_footnotes(
+    "Each bar represents one subject's best percentage change from baseline in sum of target lesion diameters.",
+    "Dashed red line = PR threshold (-30%); dashed blue line = PD threshold (+20%).",
+    "RECIST 1.1 criteria."
+  )
+```
+
+
+## Rendered Figure
+
+```{r}
+#| label: rendered-figure
+#| echo: false
+#| ref.label: pipeline
+```

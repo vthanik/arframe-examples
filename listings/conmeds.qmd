@@ -1,0 +1,114 @@
+---
+title: "Concomitant Medications Listing"
+subtitle: "Listing of Concomitant Medications by Subject"
+execute:
+  echo: true
+  eval: true
+---
+
+
+```{r}
+#| label: prereqs
+#| include: false
+library(arframe)
+fr_theme(hlines = "header", font_family = "Courier New")
+```
+
+## Setup
+
+See [Prerequisites](../install.qmd) for installation instructions.
+
+```{r}
+#| label: setup
+library(arframe)
+library(pharmaverseadam)
+library(dplyr, warn.conflicts = FALSE)
+
+blank_to_na <- function(df) {
+  df[] <- lapply(df, function(x) {
+    if (is.character(x)) x[x == ""] <- NA_character_
+    x
+  })
+  df
+}
+
+arm_levels <- c("Placebo", "Xanomeline Low Dose", "Xanomeline High Dose")
+
+cm_listing <- pharmaverseadam::adcm |>
+  blank_to_na() |>
+  filter(
+    ONTRTFL == "Y",
+    TRT01A %in% arm_levels
+  ) |>
+  mutate(
+    TRT01A  = factor(TRT01A, levels = arm_levels),
+    ASTDT   = format(ASTDT, "%d %b %Y"),
+    AENDT   = format(AENDT, "%d %b %Y"),
+    ASTDT   = if_else(is.na(ASTDT), "", ASTDT),
+    AENDT   = if_else(is.na(AENDT), "Ongoing", AENDT),
+    CMDOSE_FULL = if_else(
+      !is.na(CMDOSE) & CMDOSE != 0,
+      paste0(CMDOSE, " ", if_else(is.na(CMDOSU), "", CMDOSU)),
+      ""
+    ),
+    CMCLAS  = if_else(is.na(CMCLAS), "UNCODED", toupper(CMCLAS)),
+    CMDECOD = if_else(is.na(CMDECOD), CMTRT, CMDECOD),
+    CMROUTE = if_else(is.na(CMROUTE), "", CMROUTE)
+  ) |>
+  arrange(TRT01A, USUBJID, CMCLAS, CMDECOD) |>
+  select(
+    TRT01A,
+    USUBJID,
+    CMTRT,
+    CMDECOD,
+    CMCLAS,
+    ASTDT,
+    AENDT,
+    CMDOSE_FULL,
+    CMROUTE
+  )
+```
+
+
+## arframe Pipeline
+
+```{r}
+#| label: pipeline
+#| eval: false
+cm_listing |>
+  fr_table() |>
+  fr_titles(
+    "Listing 16.2.8.1",
+    "Listing of Concomitant Medications by Subject",
+    "Safety Population \u2014 On-Treatment Period"
+  ) |>
+  fr_cols(
+    TRT01A      = fr_col(visible = FALSE),
+    USUBJID     = fr_col("Subject ID",      width = 1.2),
+    CMTRT       = fr_col("Medication",       width = 1.8),
+    CMDECOD     = fr_col("Coded Name",       width = 1.6),
+    CMCLAS      = fr_col("ATC Class",        width = 1.8),
+    ASTDT       = fr_col("Start\nDate",      width = 1.1, align = "center"),
+    AENDT       = fr_col("End\nDate",        width = 1.1, align = "center"),
+    CMDOSE_FULL = fr_col("Dose",             width = 0.9, align = "center"),
+    CMROUTE     = fr_col("Route",            width = 0.9, align = "center")
+  ) |>
+  fr_header(bold = TRUE, align = "center") |>
+  fr_rows(page_by = "TRT01A", sort_by = c("USUBJID", "CMTRT"), repeat_cols = "USUBJID") |>
+  fr_footnotes(
+    "On-treatment concomitant medications (ONTRTFL = 'Y').",
+    "Coded name from CMDECOD (WHO Drug); ATC class from CMCLAS.",
+    "Sorted by treatment arm, subject, ATC class, and coded medication name."
+  )
+```
+
+
+## Rendered Listing
+
+This is a subject-level listing of concomitant medications taken during the on-treatment period. Pages are broken by treatment arm using `page_by`.
+
+```{r}
+#| label: cm-listing
+#| echo: false
+#| ref.label: pipeline
+```

@@ -1,0 +1,99 @@
+---
+title: "Medical History Listing"
+subtitle: "Subject-Level Medical History"
+execute:
+  echo: true
+  eval: true
+---
+
+
+```{r}
+#| label: prereqs
+#| include: false
+library(arframe)
+fr_theme(hlines = "header", font_family = "Courier New")
+```
+
+## Setup
+
+See [Prerequisites](../install.qmd) for installation instructions.
+
+```{r}
+#| label: setup
+library(arframe)
+library(pharmaverseadam)
+library(dplyr, warn.conflicts = FALSE)
+
+blank_to_na <- function(df) {
+  df[] <- lapply(df, function(x) {
+    if (is.character(x)) x[x == ""] <- NA_character_
+    x
+  })
+  df
+}
+
+arm_levels <- c("Placebo", "Xanomeline Low Dose", "Xanomeline High Dose")
+
+mh_listing <- pharmaverseadam::admh |>
+  blank_to_na() |>
+  filter(
+    SAFFL == "Y",
+    TRT01A %in% arm_levels,
+    !is.na(MHBODSYS),
+    !is.na(MHDECOD)
+  ) |>
+  mutate(TRT01A = factor(TRT01A, levels = arm_levels)) |>
+  arrange(TRT01A, USUBJID, MHBODSYS, MHDECOD) |>
+  select(
+    TRT01A,
+    USUBJID,
+    MHBODSYS,
+    MHDECOD,
+    MHTERM,
+    MHCAT,
+    MHSEV
+  )
+```
+
+
+## arframe Pipeline
+
+```{r}
+#| label: pipeline
+#| eval: false
+mh_listing |>
+  fr_table() |>
+  fr_titles(
+    "Listing 16.2.4",
+    "Medical History",
+    "Safety Population"
+  ) |>
+  fr_cols(
+    TRT01A  = fr_col(visible = FALSE),
+    USUBJID = fr_col("Subject ID",       width = 1.2),
+    MHBODSYS = fr_col("System Organ\nClass", width = 2.5),
+    MHDECOD  = fr_col("Preferred\nTerm",     width = 2.0),
+    MHTERM   = fr_col("Reported Term",   width = 2.0),
+    MHCAT    = fr_col("Category",        width = 1.3),
+    MHSEV    = fr_col("Severity",        width = 0.9, align = "center")
+  ) |>
+  fr_header(bold = TRUE, align = "center") |>
+  fr_rows(page_by = "TRT01A", sort_by = c("USUBJID", "MHBODSYS", "MHDECOD"), repeat_cols = "USUBJID") |>
+  fr_footnotes(
+    "Safety Population: all randomised subjects who received at least one dose of study medication.",
+    "System Organ Class and Preferred Term are coded using MedDRA.",
+    "Reported Term is the verbatim term as reported by the subject.",
+    "Sorted by treatment arm, subject identifier, system organ class, and preferred term."
+  )
+```
+
+
+## Rendered Listing
+
+Pages are separated by treatment arm using `page_by`. Within each arm, records are sorted by subject, system organ class, and preferred term.
+
+```{r}
+#| label: mh-listing
+#| echo: false
+#| ref.label: pipeline
+```

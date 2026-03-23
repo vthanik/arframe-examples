@@ -1,0 +1,267 @@
+---
+title: "Electrocardiogram Summary"
+subtitle: "QTc Categories and Change from Baseline"
+execute:
+  echo: true
+  eval: true
+---
+
+
+```{r}
+#| label: prereqs
+#| include: false
+library(arframe)
+fr_theme(hlines = "header", font_family = "Courier New")
+```
+
+## Setup
+
+See [Prerequisites](../install.qmd) for installation instructions.
+
+```{r}
+#| label: setup
+library(arframe)
+library(pharmaverseadam)
+library(dplyr, warn.conflicts = FALSE)
+library(tidyr)
+library(cards)
+
+blank_to_na <- function(df) {
+  df[] <- lapply(df, function(x) {
+    if (is.character(x)) x[x == ""] <- NA_character_
+    x
+  })
+  df
+}
+
+# Safety population denominators
+adsl_saf <- pharmaverseadam::adsl |>
+  blank_to_na() |>
+  filter(SAFFL == "Y", TRT01A != "Screen Failure")
+
+# QTcF post-baseline on-treatment records
+adeg_qtcf <- pharmaverseadam::adeg |>
+  blank_to_na() |>
+  filter(
+    SAFFL   == "Y",
+    TRT01A  != "Screen Failure",
+    PARAMCD == "QTCFR",
+    ONTRTFL == "Y"
+  )
+
+arm_levels <- c("Placebo", "Xanomeline Low Dose", "Xanomeline High Dose")
+
+arm_n <- adsl_saf |>
+  filter(TRT01A %in% arm_levels) |>
+  count(TRT01A) |>
+  pull(n, name = TRT01A)
+arm_n <- arm_n[arm_levels]
+
+N_total <- nrow(adsl_saf)
+n_vec   <- c(arm_n, Total = N_total)
+
+# Category ordered levels
+avalcat_levels <- c("<= 450 ms", ">450<=480 ms", ">480<=500 ms", ">500 ms")
+chgcat_levels  <- c("<= 30 ms", ">30<=60 ms", ">60 ms")
+```
+
+
+## Data Preparation
+
+::: {.panel-tabset}
+
+### dplyr
+
+```{r}
+#| label: dplyr-code
+
+n_pct <- function(n, denom) sprintf("%d (%.1f)", n, n / denom * 100)
+
+# ── Section 1: Worst post-baseline AVALCAT1 per subject ──
+# "Worst" = highest category (>500 ms > >480<=500 ms > >450<=480 ms > <= 450 ms)
+cat1_order <- c("<= 450 ms" = 1L, ">450<=480 ms" = 2L,
+                ">480<=500 ms" = 3L, ">500 ms" = 4L)
+
+worst_cat <- adeg_qtcf |>
+  filter(!is.na(AVALCAT1)) |>
+  mutate(cat_rank = cat1_order[AVALCAT1]) |>
+  group_by(USUBJID, TRT01A) |>
+  slice_max(cat_rank, n = 1L, with_ties = FALSE) |>
+  ungroup()
+
+sec1_arm <- worst_cat |>
+  count(AVALCAT1, TRT01A) |>
+  complete(AVALCAT1 = avalcat_levels, TRT01A = arm_levels, fill = list(n = 0L)) |>
+  mutate(value = mapply(n_pct, n, arm_n[TRT01A])) |>
+  select(AVALCAT1, TRT01A, value) |>
+  pivot_wider(names_from = TRT01A, values_from = value)
+
+sec1_total <- worst_cat |>
+  count(AVALCAT1) |>
+  complete(AVALCAT1 = avalcat_levels, fill = list(n = 0L)) |>
+  mutate(Total = n_pct(n, N_total)) |>
+  select(AVALCAT1, Total)
+
+sec1_wide <- left_join(sec1_arm, sec1_total, by = "AVALCAT1") |>
+  mutate(
+    section  = "Worst Post-Baseline QTcF Category",
+    category = AVALCAT1,
+    .before  = 1
+  ) |>
+  select(-AVALCAT1) |>
+  mutate(across(all_of(c(arm_levels, "Total")), ~ replace_na(.x, "0 (0.0)")))
+
+# ── Section 2: Maximum change from baseline categories per subject ──
+max_chg <- adeg_qtcf |>
+  filter(!is.na(CHG)) |>
+  group_by(USUBJID, TRT01A) |>
+  summarise(max_chg = max(CHG, na.rm = TRUE), .groups = "drop")
+
+chg_row <- function(threshold, label) {
+  max_chg |>
+    filter(max_chg > threshold) |>
+    count(TRT01A) |>
+    complete(TRT01A = arm_levels, fill = list(n = 0L)) |>
+    mutate(
+      total_n  = sum(max_chg$max_chg > threshold),
+      value    = mapply(n_pct, n, arm_n[TRT01A]),
+      Total    = n_pct(total_n, N_total),
+      section  = "Maximum Increase from Baseline",
+      category = label,
+      .before  = 1
+    ) |>
+    select(section, category, TRT01A, value, Total) |>
+    pivot_wider(names_from = TRT01A, values_from = value)
+}
+
+sec2_wide <- bind_rows(
+  chg_row(30, "> 30 ms"),
+  chg_row(60, "> 60 ms")
+)
+
+# ── Combine sections ──
+ecg_wide <- bind_rows(sec1_wide, sec2_wide)
+```
+
+### cards
+
+```{r}
+#| label: cards-code
+
+# ── Section 1: worst post-baseline AVALCAT1 per subject ──
+cat1_order <- c("<= 450 ms" = 1L, ">450<=480 ms" = 2L,
+                ">480<=500 ms" = 3L, ">500 ms" = 4L)
+
+worst_cat_c <- adeg_qtcf |>
+  filter(!is.na(AVALCAT1)) |>
+  mutate(cat_rank = cat1_order[AVALCAT1]) |>
+  group_by(USUBJID, TRT01A) |>
+  slice_max(cat_rank, n = 1L, with_ties = FALSE) |>
+  ungroup() |>
+  select(USUBJID, TRT01A, AVALCAT1)
+
+sec1_ard <- ard_stack(
+  data = worst_cat_c,
+  .by  = "TRT01A",
+  ard_categorical(variables = AVALCAT1),
+  .overall = TRUE
+)
+
+sec1_cards <- fr_wide_ard(
+  sec1_ard,
+  statistic = list(categorical = "{n} ({p}%)"),
+  decimals  = c(p = 1)
+) |>
+  filter(variable == "AVALCAT1") |>
+  mutate(
+    section  = "Worst Post-Baseline QTcF Category",
+    category = stat_label
+  ) |>
+  select(section, category, all_of(c(arm_levels, "Total")))
+
+# ── Section 2: maximum change from baseline categories ──
+max_chg_c <- adeg_qtcf |>
+  filter(!is.na(CHG)) |>
+  group_by(USUBJID, TRT01A) |>
+  summarise(max_chg = max(CHG, na.rm = TRUE), .groups = "drop") |>
+  mutate(
+    chg_gt30 = max_chg > 30,
+    chg_gt60 = max_chg > 60
+  )
+
+sec2_ard <- ard_stack(
+  data = max_chg_c,
+  .by  = "TRT01A",
+  ard_dichotomous(
+    variables = c(chg_gt30, chg_gt60),
+    value     = list(chg_gt30 = TRUE, chg_gt60 = TRUE)
+  ),
+  .overall = TRUE
+)
+
+sec2_cards <- fr_wide_ard(
+  sec2_ard,
+  statistic = list(dichotomous = "{n} ({p}%)"),
+  decimals  = c(p = 1),
+  label     = c(chg_gt30 = "> 30 ms", chg_gt60 = "> 60 ms")
+) |>
+  mutate(
+    section  = "Maximum Increase from Baseline",
+    category = stat_label
+  ) |>
+  select(section, category, all_of(c(arm_levels, "Total")))
+
+ecg_cards <- bind_rows(sec1_cards, sec2_cards)
+```
+
+:::
+
+
+## arframe Pipeline
+
+The `fr_table()` pipeline for the dplyr path:
+
+```{r}
+#| label: pipeline
+#| eval: false
+ecg_wide |>
+  fr_table() |>
+  fr_titles(
+    "Table 14.3.7",
+    "Electrocardiogram Summary",
+    "QTcF Categories and Change from Baseline \u2014 Safety Population"
+  ) |>
+  fr_cols(
+    section  = fr_col(visible = FALSE),
+    category = fr_col("Category", width = 2.8),
+    !!!setNames(
+      lapply(arm_levels, function(a) fr_col(a, align = "decimal")),
+      arm_levels
+    ),
+    Total = fr_col("Total", align = "decimal"),
+    .n = n_vec
+  ) |>
+  fr_header(bold = TRUE, align = "center") |>
+  fr_rows(
+    group_by    = "section",
+    group_label = "category",
+    group_bold  = TRUE,
+    blank_after = "section"
+  ) |>
+  fr_footnotes(
+    "QTcF = QT interval corrected using Fridericia formula (PARAMCD = QTCFR).",
+    "Section 1: worst post-baseline category based on highest observed AVALCAT1 rank per subject.",
+    "Section 2: maximum individual change from baseline (CHG) across all post-baseline visits.",
+    "On-treatment records only (ONTRTFL = Y).",
+    "Percentages based on N per treatment arm (Safety Population)."
+  )
+```
+
+
+## Rendered Table
+
+```{r}
+#| label: rendered-table
+#| echo: false
+#| ref.label: pipeline
+```

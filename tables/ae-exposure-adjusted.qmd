@@ -1,0 +1,226 @@
+---
+title: "Exposure-Adjusted Adverse Events"
+subtitle: "Incidence Rate per 100 Patient-Years"
+execute:
+  echo: true
+  eval: true
+---
+
+
+```{r}
+#| label: prereqs
+#| include: false
+library(arframe)
+fr_theme(hlines = "header", font_family = "Courier New")
+```
+
+## Setup
+
+See [Prerequisites](../install.qmd) for installation instructions.
+
+```{r}
+#| label: setup
+library(arframe)
+library(pharmaverseadam)
+library(dplyr, warn.conflicts = FALSE)
+library(tidyr)
+
+blank_to_na <- function(df) {
+  df[] <- lapply(df, function(x) {
+    if (is.character(x)) x[x == ""] <- NA_character_
+    x
+  })
+  df
+}
+
+adsl_saf <- pharmaverseadam::adsl |>
+  blank_to_na() |>
+  filter(SAFFL == "Y", TRT01A != "Screen Failure")
+
+adae_teae <- pharmaverseadam::adae |>
+  blank_to_na() |>
+  filter(SAFFL == "Y", TRTEMFL == "Y")
+
+# Total study duration per subject from ADEX (TDURD = total duration in days)
+adex_tdurd <- pharmaverseadam::adex |>
+  blank_to_na() |>
+  filter(SAFFL == "Y", TRT01A != "Screen Failure", PARAMCD == "TDURD")
+
+arm_levels <- c("Placebo", "Xanomeline Low Dose", "Xanomeline High Dose")
+```
+
+
+## Data Preparation
+
+::: {.panel-tabset}
+
+### dplyr
+
+```{r}
+#| label: dplyr-code
+
+# ── Patient-years per arm: sum subject durations / 365.25 ──
+py_by_arm <- adex_tdurd |>
+  filter(TRT01A %in% arm_levels) |>
+  group_by(TRT01A) |>
+  summarise(patient_years = sum(AVAL, na.rm = TRUE) / 365.25, .groups = "drop")
+
+# ── Subjects with at least one TEAE per SOC/PT per arm ──
+subj_soc_pt <- adae_teae |>
+  distinct(USUBJID, TRT01A, AEBODSYS, AEDECOD) |>
+  filter(TRT01A %in% arm_levels) |>
+  count(TRT01A, AEBODSYS, AEDECOD, name = "n_subj")
+
+# ── Subjects per SOC (deduplicated) ──
+subj_soc <- adae_teae |>
+  distinct(USUBJID, TRT01A, AEBODSYS) |>
+  filter(TRT01A %in% arm_levels) |>
+  count(TRT01A, AEBODSYS, name = "n_subj")
+
+# ── Helper: build n / PY / Rate columns for one dataset ──
+build_ea_cols <- function(count_df, by_vars, py_df) {
+  count_df |>
+    left_join(py_df, by = "TRT01A") |>
+    mutate(
+      n_col   = as.character(n_subj),
+      py_col  = sprintf("%.1f", patient_years),
+      rate_col = sprintf("%.2f", n_subj / patient_years * 100)
+    ) |>
+    select(all_of(by_vars), TRT01A, n_col, py_col, rate_col)
+}
+
+# ── SOC-level ──
+soc_ea <- build_ea_cols(subj_soc, c("AEBODSYS"), py_by_arm) |>
+  pivot_wider(
+    names_from  = TRT01A,
+    values_from = c(n_col, py_col, rate_col),
+    names_glue  = "{TRT01A}__{.value}"
+  ) |>
+  mutate(
+    soc      = AEBODSYS,
+    pt       = AEBODSYS,
+    row_type = "soc",
+    .before  = 1
+  ) |>
+  select(-AEBODSYS)
+
+# ── PT-level ──
+pt_ea <- build_ea_cols(subj_soc_pt, c("AEBODSYS", "AEDECOD"), py_by_arm) |>
+  pivot_wider(
+    names_from  = TRT01A,
+    values_from = c(n_col, py_col, rate_col),
+    names_glue  = "{TRT01A}__{.value}"
+  ) |>
+  mutate(
+    soc      = AEBODSYS,
+    pt       = AEDECOD,
+    row_type = "pt",
+    .before  = 1
+  ) |>
+  select(-AEBODSYS, -AEDECOD)
+
+# ── Sort order: SOC by descending subject count (Placebo + active combined) ──
+soc_order <- adae_teae |>
+  filter(TRT01A %in% arm_levels) |>
+  distinct(USUBJID, AEBODSYS) |>
+  count(AEBODSYS, name = "soc_n") |>
+  arrange(desc(soc_n)) |>
+  pull(AEBODSYS)
+
+pt_order <- adae_teae |>
+  filter(TRT01A %in% arm_levels) |>
+  distinct(USUBJID, AEBODSYS, AEDECOD) |>
+  count(AEBODSYS, AEDECOD, name = "pt_n") |>
+  arrange(match(AEBODSYS, soc_order), desc(pt_n))
+
+# ── Interleave SOC rows + PT rows ──
+ae_ea_wide <- bind_rows(
+  lapply(soc_order, function(s) {
+    soc_row <- filter(soc_ea, soc == s)
+    pt_rows  <- filter(pt_ea, soc == s) |>
+      left_join(
+        pt_order |> filter(AEBODSYS == s) |> select(pt = AEDECOD, pt_n),
+        by = "pt"
+      ) |>
+      arrange(desc(pt_n)) |>
+      select(-pt_n)
+    bind_rows(soc_row, pt_rows)
+  })
+) |>
+  mutate(across(
+    where(is.character) & !c(soc, pt, row_type),
+    ~ replace_na(.x, "0")
+  ))
+```
+
+:::
+
+
+## arframe Pipeline
+
+The `fr_table()` pipeline for the dplyr path:
+
+```{r}
+#| label: pipeline
+#| eval: false
+
+# Build fr_col() specs in arm-grouped order: n, PY, Rate per arm
+arm_col_specs <- unlist(
+  lapply(arm_levels, function(a) {
+    setNames(
+      list(
+        fr_col("n",    align = "decimal", width = 0.55),
+        fr_col("PY",   align = "decimal", width = 0.65),
+        fr_col("Rate", align = "decimal", width = 0.65)
+      ),
+      c(paste0(a, "__n_col"), paste0(a, "__py_col"), paste0(a, "__rate_col"))
+    )
+  }),
+  recursive = FALSE
+)
+
+ae_ea_wide |>
+  fr_table() |>
+  fr_titles(
+    "Exposure-Adjusted Adverse Events",
+    "Incidence Rate per 100 Patient-Years",
+    "Safety Population"
+  ) |>
+  fr_cols(
+    soc      = fr_col(visible = FALSE),
+    pt       = fr_col("System Organ Class\n  Preferred Term", width = 3.0),
+    row_type = fr_col(visible = FALSE),
+    !!!arm_col_specs
+  ) |>
+  fr_spans(
+    !!!setNames(
+      lapply(arm_levels, function(a) {
+        c(paste0(a, "__n_col"), paste0(a, "__py_col"), paste0(a, "__rate_col"))
+      }),
+      arm_levels
+    )
+  ) |>
+  fr_header(bold = TRUE, align = "center") |>
+  fr_rows(
+    group_by  = "soc",
+    indent_by = "pt"
+  ) |>
+  fr_styles(
+    fr_row_style(rows = fr_rows_matches("row_type", value = "soc"), bold = TRUE)
+  ) |>
+  fr_footnotes(
+    "n = number of subjects with at least one event in the category.",
+    "PY = patient-years of exposure (total duration in days / 365.25).",
+    "Rate = (n / PY) x 100. Subjects counted once per SOC and once per PT.",
+    "SOC rows sorted by descending subject frequency across all arms."
+  )
+```
+
+
+## Rendered Table
+
+```{r}
+#| label: rendered-table
+#| echo: false
+#| ref.label: pipeline
+```

@@ -1,0 +1,107 @@
+project:
+  type: website
+  output-dir: docs
+  render:
+    - "*.qmd"
+    - "tables/*.qmd"
+    - "listings/*.qmd"
+    - "figures/*.qmd"
+    - "!presentation/"
+    - "!CLAUDE.md"
+
+website:
+  title: "arframe TFL Gallery"
+  description: "Submission-ready clinical trial tables and listings — open-source reference collection"
+
+  navbar:
+    background: "#ffffff"
+    foreground: "#212121"
+    border: true
+    right:
+      - icon: github
+        href: https://github.com/vthanik/arframe
+        aria-label: GitHub
+
+  sidebar:
+    style: docked
+    background: "#f8f9fa"
+    border: true
+    contents:
+      - section: "Getting Started"
+        contents:
+          - install.qmd
+      - text: "---"
+      - section: "Tables"
+        contents:
+          - text: "Study Conduct"
+          - tables/enrollment-country.qmd
+          - text: "---"
+          - text: "Study Population"
+          - tables/demographic.qmd
+          - tables/demographic-categorized.qmd
+          - tables/disposition.qmd
+          - tables/disposition-screening.qmd
+          - tables/disposition-eos.qmd
+          - tables/analysis-populations.qmd
+          - text: "---"
+          - text: "Extent of Exposure"
+          - tables/conmeds.qmd
+          - tables/exposure.qmd
+          - text: "---"
+          - text: "Safety"
+          - tables/ae-soc-pt.qmd
+          - tables/ae-grade.qmd
+          - tables/ae-overall.qmd
+          - tables/ae-event-counts.qmd
+          - tables/ae-exposure-adjusted.qmd
+          - tables/ae-subgroup.qmd
+          - tables/death-summary.qmd
+          - tables/vitals.qmd
+          - tables/lab-chemistry.qmd
+          - tables/lab-shift.qmd
+          - tables/lab-toxicity.qmd
+          - tables/lab-abnormalities.qmd
+          - tables/ecg-summary.qmd
+          - text: "---"
+          - text: "Efficacy"
+          - tables/efficacy-bor.qmd
+      - text: "---"
+      - section: "Listings"
+        contents:
+          - listings/ae-listing.qmd
+          - listings/demog-listing.qmd
+          - listings/mh-listing.qmd
+          - listings/vs-listing.qmd
+          - listings/lab-listing.qmd
+          - listings/conmeds.qmd
+      - text: "---"
+      - section: "Figures"
+        contents:
+          - figures/km-plot.qmd
+          - figures/swimmer-plot.qmd
+          - figures/waterfall-plot.qmd
+
+  page-footer:
+    left: "Open-source TFL reference collection"
+    right: "CDISC Pilot Study (CDISCPILOT01) &bull; pharmaverseadam datasets"
+
+format:
+  html:
+    theme:
+      light: [cosmo, styles.scss]
+    toc: true
+    toc-depth: 3
+    toc-title: "On this page"
+    page-layout: full
+    code-copy: true
+    code-overflow: wrap
+    code-tools: true
+    highlight-style: github
+    fontsize: 1rem
+    linestretch: 1.5
+    mainfont: "Source Sans 3, Source Sans Pro, -apple-system, BlinkMacSystemFont, sans-serif"
+
+execute:
+  echo: true
+  warning: false
+  message: false

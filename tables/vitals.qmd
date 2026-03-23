@@ -1,0 +1,214 @@
+---
+title: "Vital Signs"
+subtitle: "Values and Change from Baseline by Visit"
+execute:
+  echo: true
+  eval: true
+---
+
+
+```{r}
+#| label: prereqs
+#| include: false
+library(arframe)
+fr_theme(hlines = "header", font_family = "Courier New")
+```
+
+## Setup
+
+See [Prerequisites](../install.qmd) for installation instructions.
+
+```{r}
+#| label: setup
+library(arframe)
+library(pharmaverseadam)
+library(dplyr, warn.conflicts = FALSE)
+library(tidyr)
+library(cards)
+
+blank_to_na <- function(df) {
+  df[] <- lapply(df, function(x) {
+    if (is.character(x)) x[x == ""] <- NA_character_
+    x
+  })
+  df
+}
+
+# Safety population vitals (baseline + post-baseline analysis visits)
+advs_saf <- pharmaverseadam::advs |>
+  blank_to_na() |>
+  filter(
+    SAFFL   == "Y",
+    TRT01A  != "Screen Failure",
+    PARAMCD %in% c("SYSBP", "DIABP", "PULSE", "TEMP"),
+    ANL01FL == "Y" | AVISIT == "Baseline"
+  )
+
+# Arm N from ADSL
+adsl_saf <- pharmaverseadam::adsl |>
+  blank_to_na() |>
+  filter(SAFFL == "Y", TRT01A != "Screen Failure")
+
+arm_n      <- adsl_saf |> count(TRT01A) |> pull(n, name = TRT01A)
+arm_levels <- c("Placebo", "Xanomeline Low Dose", "Xanomeline High Dose")
+
+# Visit ordering (include Baseline)
+visit_order <- c(
+  "Baseline", "Week 2", "Week 4", "Week 6", "Week 8",
+  "Week 12", "Week 16", "Week 20", "Week 24",
+  "Week 26", "End of Treatment"
+)
+
+advs_saf <- advs_saf |>
+  mutate(
+    AVISIT = factor(AVISIT, levels = visit_order),
+    TRT01A = factor(TRT01A, levels = arm_levels)
+  ) |>
+  filter(!is.na(AVISIT))
+```
+
+
+## Data Preparation
+
+::: {.panel-tabset}
+
+### dplyr
+
+```{r}
+#| label: dplyr-code
+
+# ── Wide layout: one row per Visit × Treatment ──
+# Value stats: N, Mean, SD, Median, Min, Max
+# Change from Baseline stats: N, Mean, SD, Median, Min, Max
+
+fmt1 <- function(x) ifelse(is.na(x), "", sprintf("%.1f", x))
+fmt0 <- function(x) ifelse(is.na(x), "", sprintf("%.0f", x))
+
+vs_wide <- advs_saf |>
+  group_by(PARAM, PARAMCD, AVISIT, TRT01A) |>
+  summarise(
+    val_n      = as.character(sum(!is.na(AVAL))),
+    val_mean   = fmt1(mean(AVAL, na.rm = TRUE)),
+    val_sd     = fmt1(sd(AVAL, na.rm = TRUE)),
+    val_median = fmt1(median(AVAL, na.rm = TRUE)),
+    val_min    = fmt0(min(AVAL, na.rm = TRUE)),
+    val_max    = fmt0(max(AVAL, na.rm = TRUE)),
+    chg_n      = if (all(is.na(CHG))) "" else as.character(sum(!is.na(CHG))),
+    chg_mean   = if (all(is.na(CHG))) "" else fmt1(mean(CHG, na.rm = TRUE)),
+    chg_sd     = if (all(is.na(CHG))) "" else fmt1(sd(CHG, na.rm = TRUE)),
+    chg_median = if (all(is.na(CHG))) "" else fmt1(median(CHG, na.rm = TRUE)),
+    chg_min    = if (all(is.na(CHG))) "" else fmt0(min(CHG, na.rm = TRUE)),
+    chg_max    = if (all(is.na(CHG))) "" else fmt0(max(CHG, na.rm = TRUE)),
+    .groups    = "drop"
+  ) |>
+  # Handle visits with no CHG data (Baseline)
+ mutate(
+    across(starts_with("chg_"), ~ ifelse(.x %in% c("NaN", "NA", "Inf", "-Inf"), "", .x))
+  ) |>
+  arrange(PARAM, AVISIT, TRT01A) |>
+  mutate(across(where(is.factor), as.character))
+```
+
+### cards
+
+```{r}
+#| label: cards-code
+
+vs_data <- advs_saf |>
+  mutate(across(where(is.factor), as.character))
+
+vs_ard <- ard_stack(
+  data  = vs_data,
+  .by   = c("TRT01A", "PARAM", "AVISIT"),
+  ard_continuous(
+    variables = c("AVAL", "CHG"),
+    statistic = ~ continuous_summary_fns(c("N", "mean", "sd", "median", "min", "max"))
+  ),
+  .overall = FALSE
+) |>
+  filter(variable %in% c("AVAL", "CHG"))
+
+# Pivot to wide: one row per Visit × Treatment
+vs_cards <- vs_ard |>
+  mutate(
+    stat_val = as.numeric(unlist(stat)),
+    stat_name = as.character(stat_name),
+    var = as.character(variable),
+    arm = as.character(unlist(group1_level)),
+    param = as.character(unlist(group2_level)),
+    visit = as.character(unlist(group3_level))
+  ) |>
+  mutate(
+    col_name = paste0(
+      ifelse(var == "AVAL", "val_", "chg_"),
+      stat_name
+    )
+  ) |>
+  select(param, visit, arm, col_name, stat_val) |>
+  pivot_wider(names_from = col_name, values_from = stat_val) |>
+  mutate(across(where(is.numeric), ~ ifelse(is.na(.) | is.nan(.) | is.infinite(.), NA_real_, .)))
+```
+
+:::
+
+
+## arframe Pipeline
+
+Each row is a treatment group at a visit, with Value and Change from Baseline statistics as columns:
+
+```{r}
+#| label: pipeline
+#| eval: false
+vs_wide |>
+  fr_table() |>
+  fr_titles(
+    "Table 14.3.9",
+    "Summary of Vital Signs: Values and Change from Baseline",
+    "Safety Population"
+  ) |>
+  fr_cols(
+    PARAMCD    = fr_col(visible = FALSE),
+    PARAM      = fr_col(visible = FALSE),
+    AVISIT     = fr_col("Visit", width = 1.5),
+    TRT01A     = fr_col("Treatment", width = 1.5),
+    val_n      = fr_col("N",      align = "decimal", width = 0.5),
+    val_mean   = fr_col("Mean",   align = "decimal", width = 0.7),
+    val_sd     = fr_col("SD",     align = "decimal", width = 0.7),
+    val_median = fr_col("Median", align = "decimal", width = 0.7),
+    val_min    = fr_col("Min",    align = "decimal", width = 0.5),
+    val_max    = fr_col("Max",    align = "decimal", width = 0.5),
+    chg_n      = fr_col("N",      align = "decimal", width = 0.5),
+    chg_mean   = fr_col("Mean",   align = "decimal", width = 0.7),
+    chg_sd     = fr_col("SD",     align = "decimal", width = 0.7),
+    chg_median = fr_col("Median", align = "decimal", width = 0.7),
+    chg_min    = fr_col("Min",    align = "decimal", width = 0.5),
+    chg_max    = fr_col("Max",    align = "decimal", width = 0.5)
+  ) |>
+  fr_spans(
+    "Value" = c("val_n", "val_mean", "val_sd", "val_median", "val_min", "val_max"),
+    "Change from Baseline" = c("chg_n", "chg_mean", "chg_sd", "chg_median", "chg_min", "chg_max"),
+    .gap = FALSE
+  ) |>
+  fr_header(bold = TRUE, align = "center") |>
+  fr_rows(
+    group_by    = "AVISIT",
+    group_bold  = TRUE,
+    blank_after = "AVISIT",
+    page_by     = "PARAM"
+  ) |>
+  fr_page() |>
+  fr_footnotes(
+    "Value = observed value at visit; Change = post-baseline value minus baseline.",
+    "SD = Standard Deviation.",
+    "CDISCPILOT01 Safety Population."
+  )
+```
+
+
+## Rendered Table
+
+```{r}
+#| label: rendered-table
+#| echo: false
+#| ref.label: pipeline
+```

@@ -1,0 +1,108 @@
+---
+title: "Adverse Event Listing"
+subtitle: "Listing of Treatment-Emergent Adverse Events"
+execute:
+  echo: true
+  eval: true
+---
+
+
+```{r}
+#| label: prereqs
+#| include: false
+library(arframe)
+fr_theme(hlines = "header", font_family = "Courier New")
+```
+
+## Setup
+
+See [Prerequisites](../install.qmd) for installation instructions.
+
+```{r}
+#| label: setup
+library(arframe)
+library(pharmaverseadam)
+library(dplyr, warn.conflicts = FALSE)
+
+blank_to_na <- function(df) {
+  df[] <- lapply(df, function(x) {
+    if (is.character(x)) x[x == ""] <- NA_character_
+    x
+  })
+  df
+}
+
+arm_levels <- c("Placebo", "Xanomeline Low Dose", "Xanomeline High Dose")
+
+ae_listing <- pharmaverseadam::adae |>
+  blank_to_na() |>
+  filter(
+    TRTEMFL == "Y",
+    TRT01A %in% arm_levels
+  ) |>
+  mutate(
+    TRT01A  = factor(TRT01A, levels = arm_levels),
+    AESEV   = factor(AESEV, levels = c("MILD", "MODERATE", "SEVERE")),
+    ASTDT   = format(ASTDT, "%d %b %Y"),
+    AENDT   = format(AENDT, "%d %b %Y"),
+    ASTDT   = if_else(is.na(ASTDT), "Ongoing", ASTDT),
+    AENDT   = if_else(is.na(AENDT), "Ongoing", AENDT)
+  ) |>
+  arrange(TRT01A, USUBJID, AEBODSYS, AEDECOD) |>
+  select(
+    TRT01A,
+    USUBJID,
+    AEBODSYS,
+    AEDECOD,
+    AESEV,
+    ASTDT,
+    AENDT,
+    AEOUT,
+    AEREL
+  )
+```
+
+
+## arframe Pipeline
+
+```{r}
+#| label: pipeline
+#| eval: false
+ae_listing |>
+  fr_table() |>
+  fr_titles(
+    "Listing 16.2.7.1",
+    "Listing of Treatment-Emergent Adverse Events",
+    "Safety Population"
+  ) |>
+  fr_cols(
+    TRT01A   = fr_col(visible = FALSE),
+    USUBJID  = fr_col("Subject ID",    width = 1.2),
+    AEBODSYS = fr_col("System Organ\nClass", width = 2.2),
+    AEDECOD  = fr_col("Preferred\nTerm",     width = 2.0),
+    AESEV    = fr_col("Severity",      width = 0.9, align = "center"),
+    ASTDT    = fr_col("Start\nDate",   width = 1.1, align = "center"),
+    AENDT    = fr_col("End\nDate",     width = 1.1, align = "center"),
+    AEOUT    = fr_col("Outcome",       width = 1.3),
+    AEREL    = fr_col("Relationship\nto Study Drug", width = 1.3)
+  ) |>
+  fr_header(bold = TRUE, align = "center") |>
+  fr_rows(page_by = "TRT01A", sort_by = c("USUBJID", "AEBODSYS", "AEDECOD"), repeat_cols = "USUBJID") |>
+  fr_footnotes(
+    "TEAE = Treatment-Emergent Adverse Event: onset on or after first dose date.",
+    "Outcome: RECOVERED/RESOLVED, RECOVERING/RESOLVING, NOT RECOVERED/NOT RESOLVED, FATAL, UNKNOWN.",
+    "Relationship: RELATED, NOT RELATED, POSSIBLY RELATED.",
+    "Sorted by treatment arm, subject, system organ class, and preferred term."
+  )
+```
+
+
+## Rendered Listing
+
+This is a subject-level listing -- no summarisation. `fr_table()` is called directly on the data. Pages are broken by treatment arm using `page_by`.
+
+```{r}
+#| label: ae-listing
+#| echo: false
+#| ref.label: pipeline
+```

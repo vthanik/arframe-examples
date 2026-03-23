@@ -1,0 +1,232 @@
+---
+title: "Extent of Exposure"
+subtitle: "Study Drug Exposure Summary"
+execute:
+  echo: true
+  eval: true
+---
+
+
+```{r}
+#| label: prereqs
+#| include: false
+library(arframe)
+fr_theme(hlines = "header", font_family = "Courier New")
+```
+
+## Setup
+
+See [Prerequisites](../install.qmd) for installation instructions.
+
+```{r}
+#| label: setup
+library(arframe)
+library(pharmaverseadam)
+library(dplyr, warn.conflicts = FALSE)
+library(tidyr)
+library(cards)
+
+blank_to_na <- function(df) {
+  df[] <- lapply(df, function(x) {
+    if (is.character(x)) x[x == ""] <- NA_character_
+    x
+  })
+  df
+}
+
+adex_saf <- pharmaverseadam::adex |>
+  blank_to_na() |>
+  filter(
+    SAFFL  == "Y",
+    TRT01A != "Screen Failure",
+    PARAMCD %in% c("TDURD", "TDOSE", "AVDDSE")
+  )
+
+arm_levels <- c("Placebo", "Xanomeline Low Dose", "Xanomeline High Dose")
+
+# N per arm from TDURD (one row per subject)
+arm_n <- adex_saf |>
+  filter(PARAMCD == "TDURD") |>
+  count(TRT01A) |>
+  pull(n, name = TRT01A)
+arm_n <- arm_n[arm_levels]
+```
+
+
+## Data Preparation
+
+::: {.panel-tabset}
+
+### dplyr
+
+```{r}
+#| label: dplyr-code
+
+param_labels <- c(
+  TDURD  = "Total Duration (days)",
+  TDOSE  = "Total Dose (mg)",
+  AVDDSE = "Average Daily Dose (mg)"
+)
+
+# ── Continuous stats per PARAMCD × TRT01A ──
+cont_stats <- adex_saf |>
+  group_by(PARAMCD, TRT01A) |>
+  summarise(
+    N      = as.character(n()),
+    Mean   = sprintf("%.1f", mean(AVAL, na.rm = TRUE)),
+    SD     = sprintf("%.2f", sd(AVAL, na.rm = TRUE)),
+    Median = sprintf("%.1f", median(AVAL, na.rm = TRUE)),
+    Min    = sprintf("%.1f", min(AVAL, na.rm = TRUE)),
+    Max    = sprintf("%.1f", max(AVAL, na.rm = TRUE)),
+    .groups = "drop"
+  ) |>
+  pivot_longer(c(N, Mean, SD, Median, Min, Max),
+               names_to = "stat_label", values_to = "value") |>
+  pivot_wider(names_from = TRT01A, values_from = value) |>
+  mutate(
+    variable = unname(param_labels[PARAMCD]),
+    .before  = 1
+  ) |>
+  select(-PARAMCD)
+
+# ── Duration category rows (derived from TDURD) ──
+tdurd_data <- adex_saf |> filter(PARAMCD == "TDURD")
+
+dur_thresholds <- c(
+  "\u22651 day"   = 1,
+  "\u226530 days" = 30,
+  "\u226560 days" = 60,
+  "\u226590 days" = 90,
+  "\u2265180 days" = 180
+)
+
+dur_rows <- lapply(names(dur_thresholds), function(lbl) {
+  thresh <- dur_thresholds[[lbl]]
+  by_arm <- tdurd_data |>
+    group_by(TRT01A) |>
+    summarise(
+      n   = sum(AVAL >= thresh, na.rm = TRUE),
+      N   = n(),
+      pct = sprintf("%d (%.1f)", n, n / N * 100),
+      .groups = "drop"
+    ) |>
+    select(TRT01A, pct) |>
+    pivot_wider(names_from = TRT01A, values_from = pct)
+
+  by_arm |>
+    mutate(
+      variable   = "Duration Categories, n (%)",
+      stat_label = lbl,
+      .before    = 1
+    )
+})
+
+dur_wide <- bind_rows(dur_rows)
+
+# ── Combine all rows ──
+# Order: TDURD stats, TDOSE stats, AVDDSE stats, duration categories
+param_order <- c("Total Duration (days)", "Total Dose (mg)", "Average Daily Dose (mg)",
+                 "Duration Categories, n (%)")
+
+exposure_wide <- bind_rows(cont_stats, dur_wide) |>
+  mutate(
+    variable = factor(variable, levels = param_order),
+    stat_label = factor(stat_label, levels = c("N", "Mean", "SD", "Median", "Min", "Max",
+                                                names(dur_thresholds)))
+  ) |>
+  arrange(variable, stat_label) |>
+  mutate(
+    variable   = as.character(variable),
+    stat_label = as.character(stat_label)
+  ) |>
+  mutate(across(all_of(arm_levels), ~ replace_na(.x, "")))
+```
+
+### cards
+
+```{r}
+#| label: cards-code
+
+# ── Continuous stats via cards ──
+# .by = c("TRT01A", "PARAMCD"): TRT01A becomes arm columns, PARAMCD is preserved
+# as an extra group column in fr_wide_ard output alongside variable/stat_label.
+ex_ard <- ard_stack(
+  data = adex_saf,
+  .by  = c("TRT01A", "PARAMCD"),
+  ard_continuous(
+    variables  = "AVAL",
+    statistic  = ~ continuous_summary_fns(c("N", "mean", "sd", "median", "min", "max"))
+  ),
+  .overall = FALSE
+) |>
+  filter(variable == "AVAL")
+
+param_labels <- c(
+  TDURD  = "Total Duration (days)",
+  TDOSE  = "Total Dose (mg)",
+  AVDDSE = "Average Daily Dose (mg)"
+)
+
+exposure_cards <- fr_wide_ard(
+  ex_ard,
+  statistic = list(
+    continuous = c(
+      "N"      = "{N}",
+      "Mean"   = "{mean}",
+      "SD"     = "{sd}",
+      "Median" = "{median}",
+      "Min"    = "{min}",
+      "Max"    = "{max}"
+    )
+  ),
+  decimals = c(mean = 1, sd = 2, median = 1, min = 1, max = 1),
+  column  = "TRT01A"
+) |>
+  mutate(variable = unname(param_labels[PARAMCD])) |>
+  select(-PARAMCD) |>
+  mutate(across(where(is.factor), as.character))
+```
+
+:::
+
+
+## arframe Pipeline
+
+```{r}
+#| label: pipeline
+#| eval: false
+exposure_wide |>
+  fr_table() |>
+  fr_titles(
+    "Extent of Exposure",
+    "Study Drug Exposure Summary",
+    "Safety Population"
+  ) |>
+  fr_cols(
+    variable   = fr_col(visible = FALSE),
+    stat_label = fr_col("", width = 2.2),
+    !!!setNames(
+      lapply(arm_levels, function(a) fr_col(a, align = "decimal")),
+      arm_levels
+    ),
+    .n = arm_n
+  ) |>
+  fr_header(bold = TRUE, align = "center") |>
+  fr_rows(
+    group_by    = "variable",
+    group_label = "stat_label",
+    group_bold  = TRUE,
+    blank_after = "variable"
+  ) |>
+  fr_footnotes(
+    "Safety Population: subjects who received at least one dose of study drug.",
+    "Duration categories are based on Total Duration (TDURD). Percentages based on N per treatment group.",
+    "SD = Standard Deviation."
+  )
+```
+
+```{r}
+#| label: table
+#| echo: false
+#| ref.label: pipeline
+```

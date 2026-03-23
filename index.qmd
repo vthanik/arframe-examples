@@ -1,0 +1,415 @@
+---
+title: ""
+execute:
+  echo: false
+  eval: false
+---
+
+::: {.gallery-header}
+
+# arframe TFL Gallery
+
+Submission-ready clinical trial tables and listings. Every example runs — pick a tab, copy the code.
+
+:::
+
+## Tables
+
+::: {.tlg-grid}
+
+::: {.tlg-card}
+[TABLE · STUDY POPULATION]{.card-type}
+
+### [Demographics Summary](tables/demographic.qmd)
+
+[Continuous + categorical statistics by treatment arm with Total column. Group headers, blank-after, decimal alignment.]{.card-desc}
+
+::: {.card-tags}
+[decimal]{.tag .tag-decimal}
+[cards]{.tag .tag-cards}
+:::
+:::
+
+::: {.tlg-card}
+[TABLE · STUDY POPULATION]{.card-type}
+
+### [Demographics with Categorization](tables/demographic-categorized.qmd)
+
+[Demographics with age group (AGEGR1) and race group (RACEGR1) categorization.]{.card-desc}
+
+::: {.card-tags}
+[decimal]{.tag .tag-decimal}
+[cards]{.tag .tag-cards}
+:::
+:::
+
+::: {.tlg-card}
+[TABLE · STUDY POPULATION]{.card-type}
+
+### [Subject Disposition](tables/disposition.qmd)
+
+[Screening, randomization, treatment completion, and reasons for discontinuation.]{.card-desc}
+
+::: {.card-tags}
+[decimal]{.tag .tag-decimal}
+:::
+:::
+
+::: {.tlg-card}
+[TABLE · STUDY POPULATION]{.card-type}
+
+### [Disposition - Screening](tables/disposition-screening.qmd)
+
+[Screened, screen failures, and enrolled subject counts.]{.card-desc}
+
+::: {.card-tags}
+[decimal]{.tag .tag-decimal}
+:::
+:::
+
+::: {.tlg-card}
+[TABLE · STUDY POPULATION]{.card-type}
+
+### [Disposition - End of Study](tables/disposition-eos.qmd)
+
+[End of study status — completed, discontinued, ongoing.]{.card-desc}
+
+::: {.card-tags}
+[decimal]{.tag .tag-decimal}
+:::
+:::
+
+::: {.tlg-card}
+[TABLE · STUDY CONDUCT]{.card-type}
+
+### [Enrollment by Country and Site](tables/enrollment-country.qmd)
+
+[Enrollment counts by country with site-level detail. Hierarchical layout.]{.card-desc}
+
+::: {.card-tags}
+[hierarchy]{.tag .tag-hierarchy}
+[decimal]{.tag .tag-decimal}
+:::
+:::
+
+::: {.tlg-card}
+[TABLE · STUDY POPULATION]{.card-type}
+
+### [Analysis Populations](tables/analysis-populations.qmd)
+
+[Summary of analysis populations — enrolled, safety, ITT/FAS.]{.card-desc}
+
+::: {.card-tags}
+[decimal]{.tag .tag-decimal}
+:::
+:::
+
+::: {.tlg-card}
+[TABLE · SAFETY]{.card-type}
+
+### [Death Summary](tables/death-summary.qmd)
+
+[Deaths by treatment arm with cause-of-death breakdown.]{.card-desc}
+
+::: {.card-tags}
+[decimal]{.tag .tag-decimal}
+:::
+:::
+
+::: {.tlg-card}
+[TABLE · SAFETY]{.card-type}
+
+### [AE by SOC and Preferred Term](tables/ae-soc-pt.qmd)
+
+[Hierarchical SOC/PT structure. Bold SOC rows, indented PTs, frequency sorting.]{.card-desc}
+
+::: {.card-tags}
+[hierarchy]{.tag .tag-hierarchy}
+[decimal]{.tag .tag-decimal}
+[cards]{.tag .tag-cards}
+:::
+:::
+
+::: {.tlg-card}
+[TABLE · SAFETY]{.card-type}
+
+### [AE by Grade/Intensity](tables/ae-grade.qmd)
+
+[Adverse events by maximum CTCAE grade per treatment arm.]{.card-desc}
+
+::: {.card-tags}
+[hierarchy]{.tag .tag-hierarchy}
+[decimal]{.tag .tag-decimal}
+:::
+:::
+
+::: {.tlg-card}
+[TABLE · SAFETY]{.card-type}
+
+### [Overall Safety Summary](tables/ae-overall.qmd)
+
+[Any TEAE, SAEs, deaths, discontinuations due to AE.]{.card-desc}
+
+::: {.card-tags}
+[decimal]{.tag .tag-decimal}
+:::
+:::
+
+::: {.tlg-card}
+[TABLE · SAFETY]{.card-type}
+
+### [AE with Event Counts](tables/ae-event-counts.qmd)
+
+[SOC/PT table showing both subject counts and event counts per term.]{.card-desc}
+
+::: {.card-tags}
+[hierarchy]{.tag .tag-hierarchy}
+[decimal]{.tag .tag-decimal}
+[cards]{.tag .tag-cards}
+:::
+:::
+
+::: {.tlg-card}
+[TABLE · SAFETY]{.card-type}
+
+### [Exposure-Adjusted Adverse Events](tables/ae-exposure-adjusted.qmd)
+
+[AE incidence rates per 100 patient-years by SOC and preferred term.]{.card-desc}
+
+::: {.card-tags}
+[hierarchy]{.tag .tag-hierarchy}
+[decimal]{.tag .tag-decimal}
+:::
+:::
+
+::: {.tlg-card}
+[TABLE · SAFETY]{.card-type}
+
+### [Adverse Events by Subgroup](tables/ae-subgroup.qmd)
+
+[Treatment-emergent AE summary stratified by treatment arm and age subgroup.]{.card-desc}
+
+::: {.card-tags}
+[decimal]{.tag .tag-decimal}
+[split]{.tag .tag-split}
+:::
+:::
+
+::: {.tlg-card}
+[TABLE · SAFETY]{.card-type}
+
+### [Vital Signs](tables/vitals.qmd)
+
+[One row per treatment group at each visit, Value and Change from Baseline statistics as columns. Page-by parameter with spanning headers.]{.card-desc}
+
+::: {.card-tags}
+[page_by]{.tag .tag-pageby}
+[decimal]{.tag .tag-decimal}
+[split]{.tag .tag-split}
+:::
+:::
+
+::: {.tlg-card}
+[TABLE · EXTENT OF EXPOSURE]{.card-type}
+
+### [Concomitant Medications](tables/conmeds.qmd)
+
+[Medications by ATC class and preferred name. Hierarchical with bold category rows.]{.card-desc}
+
+::: {.card-tags}
+[hierarchy]{.tag .tag-hierarchy}
+[decimal]{.tag .tag-decimal}
+:::
+:::
+
+::: {.tlg-card}
+[TABLE · EXTENT OF EXPOSURE]{.card-type}
+
+### [Extent of Exposure](tables/exposure.qmd)
+
+[Study drug exposure: total duration, total dose, average daily dose with duration categories.]{.card-desc}
+
+::: {.card-tags}
+[decimal]{.tag .tag-decimal}
+[cards]{.tag .tag-cards}
+:::
+:::
+
+::: {.tlg-card}
+[TABLE · SAFETY]{.card-type}
+
+### [Laboratory Results - Chemistry](tables/lab-chemistry.qmd)
+
+[Chemistry panel summary by visit. Per-variable decimal precision showcase with `fr_wide_ard()`.]{.card-desc}
+
+::: {.card-tags}
+[decimal]{.tag .tag-decimal}
+[page_by]{.tag .tag-pageby}
+[cards]{.tag .tag-cards}
+:::
+:::
+
+::: {.tlg-card}
+[TABLE · SAFETY]{.card-type}
+
+### [Laboratory Marked Abnormalities](tables/lab-abnormalities.qmd)
+
+[Subjects with notable high/low laboratory values by chemistry parameter and treatment arm.]{.card-desc}
+
+::: {.card-tags}
+[decimal]{.tag .tag-decimal}
+[cards]{.tag .tag-cards}
+:::
+:::
+
+::: {.tlg-card}
+[TABLE · SAFETY]{.card-type}
+
+### [Electrocardiogram Summary](tables/ecg-summary.qmd)
+
+[Worst post-baseline QTc categories and maximum increase from baseline by treatment arm.]{.card-desc}
+
+::: {.card-tags}
+[decimal]{.tag .tag-decimal}
+[cards]{.tag .tag-cards}
+:::
+:::
+
+::: {.tlg-card}
+[TABLE · EFFICACY]{.card-type}
+
+### [Best Overall Response](tables/efficacy-bor.qmd)
+
+[BOR categories with derived ORR and DCR rates. Oncology efficacy endpoint summary.]{.card-desc}
+
+::: {.card-tags}
+[decimal]{.tag .tag-decimal}
+[cards]{.tag .tag-cards}
+:::
+:::
+
+:::
+
+
+## Figures
+
+::: {.tlg-grid}
+
+::: {.tlg-card}
+[FIGURE · EFFICACY]{.card-type}
+
+### [Kaplan-Meier Plot](figures/km-plot.qmd)
+
+[Progression-free survival curves by treatment arm with number-at-risk table.]{.card-desc}
+
+::: {.card-tags}
+:::
+:::
+
+::: {.tlg-card}
+[FIGURE · EFFICACY]{.card-type}
+
+### [Swimmer Plot](figures/swimmer-plot.qmd)
+
+[Subject treatment duration with response markers over time.]{.card-desc}
+
+::: {.card-tags}
+:::
+:::
+
+::: {.tlg-card}
+[FIGURE · EFFICACY]{.card-type}
+
+### [Waterfall Plot](figures/waterfall-plot.qmd)
+
+[Best percentage change from baseline in target lesion size per subject.]{.card-desc}
+
+::: {.card-tags}
+:::
+:::
+
+:::
+
+
+## Listings
+
+::: {.tlg-grid}
+
+::: {.tlg-card}
+[LISTING · SAFETY]{.card-type}
+
+### [Adverse Event Listing](listings/ae-listing.qmd)
+
+[Subject-level AE listing with SOC, PT, severity, onset, duration, outcome, relationship.]{.card-desc}
+
+::: {.card-tags}
+[listing]{.tag .tag-listing}
+:::
+:::
+
+::: {.tlg-card}
+[LISTING · STUDY POPULATION]{.card-type}
+
+### [Demographic Characteristics](listings/demog-listing.qmd)
+
+[Subject-level demographics — age, sex, race, ethnicity, weight, height.]{.card-desc}
+
+::: {.card-tags}
+[listing]{.tag .tag-listing}
+:::
+:::
+
+::: {.tlg-card}
+[LISTING · SAFETY]{.card-type}
+
+### [Medical History Listing](listings/mh-listing.qmd)
+
+[Subject-level medical history with SOC, preferred term, reported term, category, and severity.]{.card-desc}
+
+::: {.card-tags}
+[listing]{.tag .tag-listing}
+[page_by]{.tag .tag-pageby}
+:::
+:::
+
+::: {.tlg-card}
+[LISTING · SAFETY]{.card-type}
+
+### [Vital Signs Listing](listings/vs-listing.qmd)
+
+[Subject-level vital signs by visit with baseline and change values.]{.card-desc}
+
+::: {.card-tags}
+[listing]{.tag .tag-listing}
+[page_by]{.tag .tag-pageby}
+:::
+:::
+
+::: {.tlg-card}
+[LISTING · SAFETY]{.card-type}
+
+### [Laboratory Test Results Listing](listings/lab-listing.qmd)
+
+[Subject-level chemistry lab results with value, baseline, change, and normal range flag.]{.card-desc}
+
+::: {.card-tags}
+[listing]{.tag .tag-listing}
+[decimal]{.tag .tag-decimal}
+[page_by]{.tag .tag-pageby}
+:::
+:::
+
+::: {.tlg-card}
+[LISTING · EXTENT OF EXPOSURE]{.card-type}
+
+### [Concomitant Medications Listing](listings/conmeds.qmd)
+
+[Subject-level concomitant medications with ATC class, dose, route, and dates.]{.card-desc}
+
+::: {.card-tags}
+[listing]{.tag .tag-listing}
+[page_by]{.tag .tag-pageby}
+:::
+:::
+
+:::

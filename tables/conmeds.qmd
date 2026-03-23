@@ -1,0 +1,229 @@
+---
+title: "Concomitant Medications"
+subtitle: "Summary of Concomitant Medications by ATC Class and Medication Name"
+execute:
+  echo: true
+  eval: true
+---
+
+
+```{r}
+#| label: prereqs
+#| include: false
+library(arframe)
+fr_theme(hlines = "header", font_family = "Courier New")
+```
+
+## Setup
+
+See [Prerequisites](../install.qmd) for installation instructions.
+
+```{r}
+#| label: setup
+library(arframe)
+library(pharmaverseadam)
+library(dplyr, warn.conflicts = FALSE)
+library(tidyr)
+library(cards)
+
+blank_to_na <- function(df) {
+  df[] <- lapply(df, function(x) {
+    if (is.character(x)) x[x == ""] <- NA_character_
+    x
+  })
+  df
+}
+
+adsl_saf <- pharmaverseadam::adsl |>
+  blank_to_na() |>
+  filter(SAFFL == "Y", TRT01A != "Screen Failure")
+
+# adcm: on-treatment concomitant medications (ANL01FL = "Y")
+adcm_ont <- pharmaverseadam::adcm |>
+  blank_to_na() |>
+  filter(ONTRTFL == "Y", TRT01A != "Screen Failure") |>
+  mutate(
+    CMCLAS  = if_else(is.na(CMCLAS), "UNCODED", toupper(CMCLAS)),
+    CMDECOD = if_else(is.na(CMDECOD), CMTRT, CMDECOD),
+    CMDECOD = toupper(CMDECOD)
+  )
+
+arm_levels <- c("Placebo", "Xanomeline Low Dose", "Xanomeline High Dose")
+
+arm_n <- adsl_saf |>
+  filter(TRT01A %in% arm_levels) |>
+  count(TRT01A) |>
+  pull(n, name = TRT01A)
+arm_n <- arm_n[arm_levels]
+
+N_total <- nrow(adsl_saf)
+```
+
+
+## Data Preparation
+
+::: {.panel-tabset}
+
+### dplyr
+
+```{r}
+#| label: dplyr-code
+
+n_pct <- function(n, denom) sprintf("%d (%.1f)", n, n / denom * 100)
+
+# ── ATC class level ──
+atc_arm <- adcm_ont |>
+  distinct(USUBJID, TRT01A, CMCLAS) |>
+  count(TRT01A, CMCLAS) |>
+  filter(TRT01A %in% arm_levels) |>
+  mutate(value = mapply(n_pct, n, arm_n[TRT01A])) |>
+  select(TRT01A, CMCLAS, value) |>
+  pivot_wider(names_from = TRT01A, values_from = value)
+
+atc_total <- adcm_ont |>
+  distinct(USUBJID, CMCLAS) |>
+  count(CMCLAS) |>
+  mutate(Total = n_pct(n, N_total)) |>
+  select(CMCLAS, Total)
+
+atc_wide <- left_join(atc_arm, atc_total, by = "CMCLAS") |>
+  mutate(
+    atc_class = CMCLAS,
+    med_name  = CMCLAS,
+    row_type  = "atc",
+    .before   = 1
+  ) |>
+  select(-CMCLAS)
+
+# ── Medication name level ──
+med_arm <- adcm_ont |>
+  distinct(USUBJID, TRT01A, CMCLAS, CMDECOD) |>
+  count(TRT01A, CMCLAS, CMDECOD) |>
+  filter(TRT01A %in% arm_levels) |>
+  mutate(value = mapply(n_pct, n, arm_n[TRT01A])) |>
+  select(TRT01A, CMCLAS, CMDECOD, value) |>
+  pivot_wider(names_from = TRT01A, values_from = value)
+
+med_total <- adcm_ont |>
+  distinct(USUBJID, CMCLAS, CMDECOD) |>
+  count(CMCLAS, CMDECOD) |>
+  mutate(Total = n_pct(n, N_total)) |>
+  select(CMCLAS, CMDECOD, Total)
+
+med_wide <- left_join(med_arm, med_total, by = c("CMCLAS", "CMDECOD")) |>
+  mutate(
+    atc_class = CMCLAS,
+    med_name  = CMDECOD,
+    row_type  = "med",
+    .before   = 1
+  ) |>
+  select(-CMCLAS, -CMDECOD)
+
+# ── Sort: ATC class descending by subject count, meds descending within class ──
+atc_order <- adcm_ont |>
+  distinct(USUBJID, CMCLAS) |>
+  count(CMCLAS, name = "n") |>
+  arrange(desc(n)) |>
+  pull(CMCLAS)
+
+med_sorted <- adcm_ont |>
+  distinct(USUBJID, CMCLAS, CMDECOD) |>
+  count(CMCLAS, CMDECOD, name = "n") |>
+  arrange(match(CMCLAS, atc_order), desc(n)) |>
+  select(atc_class = CMCLAS, med_name = CMDECOD)
+
+med_wide <- med_sorted |> left_join(med_wide, by = c("atc_class", "med_name"))
+
+# ── Interleave ATC header rows + medication rows ──
+cm_wide <- bind_rows(
+  lapply(atc_order, function(a) {
+    bind_rows(
+      filter(atc_wide, atc_class == a),
+      filter(med_wide, atc_class == a)
+    )
+  })
+) |>
+  mutate(across(all_of(c(arm_levels, "Total")), ~ replace_na(.x, "0 (0.0)")))
+
+n_vec <- c(arm_n, Total = N_total)
+```
+
+### cards
+
+```{r}
+#| label: cards-code
+cm_ard <- ard_stack_hierarchical(
+  data        = adcm_ont |> filter(TRT01A %in% arm_levels),
+  variables   = c(CMCLAS, CMDECOD),
+  by          = TRT01A,
+  denominator = adsl_saf,
+  id          = USUBJID,
+  overall     = TRUE
+) |>
+  sort_ard_hierarchical(sort = "descending")
+
+# Note: cards output uses soc/pt column names vs dplyr's atc_class/med_name
+cm_cards <- fr_wide_ard(
+  cm_ard,
+  statistic = "{n} ({p}%)",
+  decimals  = c(p = 1),
+  label     = c(
+    CMCLAS  = "ATC Class",
+    CMDECOD = "Medication Name"
+  )
+)
+```
+
+:::
+
+
+## arframe Pipeline
+
+The `fr_table()` pipeline for the dplyr path:
+
+```{r}
+#| label: pipeline
+#| eval: false
+cm_wide |>
+  fr_table() |>
+  fr_titles(
+    "Table 14.5.1",
+    "Summary of Concomitant Medications by ATC Class and Medication Name",
+    "Safety Population \u2014 On-Treatment Period"
+  ) |>
+  fr_cols(
+    atc_class = fr_col(visible = FALSE),
+    med_name  = fr_col("ATC Class\n  Medication Name", width = 3.5),
+    row_type  = fr_col(visible = FALSE),
+    !!!setNames(
+      lapply(arm_levels, function(a) fr_col(a, align = "decimal")),
+      arm_levels
+    ),
+    Total = fr_col("Total", align = "decimal"),
+    .n = n_vec
+  ) |>
+  fr_header(bold = TRUE, align = "center") |>
+  fr_rows(
+    group_by  = "atc_class",
+    indent_by = "med_name"
+  ) |>
+  fr_styles(
+    fr_row_style(rows = fr_rows_matches("row_type", value = "atc"), bold = TRUE)
+  ) |>
+  fr_footnotes(
+    "Concomitant medications are those with ONTRTFL = 'Y'.",
+    "Subjects are counted once per ATC class and once per medication name.",
+    "Percentages based on N per treatment arm (Safety Population).",
+    "ATC class rows sorted by descending subject frequency; medications sorted within class by descending frequency.",
+    "Medication names from CMDECOD (WHO Drug coded); ATC class from CMCLAS."
+  )
+```
+
+
+## Rendered Table
+
+```{r}
+#| label: rendered-table
+#| echo: false
+#| ref.label: pipeline
+```

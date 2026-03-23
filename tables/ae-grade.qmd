@@ -1,0 +1,259 @@
+---
+title: "Adverse Events by Grade / Intensity"
+subtitle: "Summary of Treatment-Emergent Adverse Events by SOC, PT, and Severity Grade"
+execute:
+  echo: true
+  eval: true
+---
+
+
+```{r}
+#| label: prereqs
+#| include: false
+library(arframe)
+fr_theme(hlines = "header", font_family = "Courier New")
+```
+
+## Setup
+
+See [Prerequisites](../install.qmd) for installation instructions.
+
+```{r}
+#| label: setup
+library(arframe)
+library(pharmaverseadam)
+library(dplyr, warn.conflicts = FALSE)
+library(tidyr)
+library(cards)
+
+blank_to_na <- function(df) {
+  df[] <- lapply(df, function(x) {
+    if (is.character(x)) x[x == ""] <- NA_character_
+    x
+  })
+  df
+}
+
+adsl_saf <- pharmaverseadam::adsl |>
+  blank_to_na() |>
+  filter(SAFFL == "Y", TRT01A != "Screen Failure")
+
+adae_teae <- pharmaverseadam::adae |>
+  blank_to_na() |>
+  filter(TRTEMFL == "Y", TRT01A != "Screen Failure")
+
+arm_levels <- c("Placebo", "Xanomeline Low Dose", "Xanomeline High Dose")
+sev_levels <- c("MILD", "MODERATE", "SEVERE")
+
+arm_n <- adsl_saf |>
+  filter(TRT01A %in% arm_levels) |>
+  count(TRT01A) |>
+  pull(n, name = TRT01A)
+arm_n <- arm_n[arm_levels]
+
+N_total <- nrow(adsl_saf)
+```
+
+
+## Data Preparation
+
+::: {.panel-tabset}
+
+### dplyr
+
+```{r}
+#| label: dplyr-code
+
+n_pct <- function(n, denom) sprintf("%d (%.1f)", n, n / denom * 100)
+
+# ── Column names: Placebo_MILD, Placebo_MODERATE, ... ──
+col_names <- unlist(lapply(arm_levels, function(a) {
+  paste(gsub(" ", "_", a), sev_levels, sep = "_")
+}))
+
+# ── Helper: pivot arm×sev to wide, preserving any non-TRT01A/AESEV/value cols ──
+pivot_arm_sev <- function(df, value_col = "value") {
+  id_cols <- setdiff(names(df), c("TRT01A", "AESEV", value_col))
+  df |>
+    mutate(col = paste(gsub(" ", "_", TRT01A), AESEV, sep = "_")) |>
+    select(all_of(id_cols), col, all_of(value_col)) |>
+    pivot_wider(names_from = col, values_from = all_of(value_col))
+}
+
+# ── SOC × severity ──
+soc_sev_arm <- adae_teae |>
+  filter(TRT01A %in% arm_levels, AESEV %in% sev_levels) |>
+  distinct(USUBJID, TRT01A, AEBODSYS, AESEV) |>
+  count(TRT01A, AEBODSYS, AESEV) |>
+  mutate(value = mapply(n_pct, n, arm_n[TRT01A])) |>
+  select(TRT01A, AEBODSYS, AESEV, value) |>
+  pivot_arm_sev()
+
+soc_wide <- adae_teae |>
+  filter(TRT01A %in% arm_levels) |>
+  distinct(USUBJID, AEBODSYS) |>
+  count(AEBODSYS, name = "soc_n") |>
+  left_join(soc_sev_arm, by = "AEBODSYS") |>
+  mutate(
+    soc      = AEBODSYS,
+    pt       = AEBODSYS,
+    row_type = "soc",
+    .before  = 1
+  ) |>
+  select(-AEBODSYS, -soc_n)
+
+# ── PT × severity ──
+pt_sev_arm <- adae_teae |>
+  filter(TRT01A %in% arm_levels, AESEV %in% sev_levels) |>
+  distinct(USUBJID, TRT01A, AEBODSYS, AEDECOD, AESEV) |>
+  count(TRT01A, AEBODSYS, AEDECOD, AESEV) |>
+  mutate(value = mapply(n_pct, n, arm_n[TRT01A])) |>
+  select(TRT01A, AEBODSYS, AEDECOD, AESEV, value) |>
+  pivot_arm_sev()
+
+pt_wide <- adae_teae |>
+  filter(TRT01A %in% arm_levels) |>
+  distinct(USUBJID, AEBODSYS, AEDECOD) |>
+  count(AEBODSYS, AEDECOD, name = "pt_n") |>
+  left_join(pt_sev_arm, by = c("AEBODSYS", "AEDECOD")) |>
+  mutate(
+    soc      = AEBODSYS,
+    pt       = AEDECOD,
+    row_type = "pt",
+    .before  = 1
+  ) |>
+  select(-AEBODSYS, -AEDECOD, -pt_n)
+
+# ── Sort order ──
+soc_order <- adae_teae |>
+  distinct(USUBJID, AEBODSYS) |>
+  count(AEBODSYS, name = "n") |>
+  arrange(desc(n)) |>
+  pull(AEBODSYS)
+
+pt_order <- adae_teae |>
+  distinct(USUBJID, AEBODSYS, AEDECOD) |>
+  count(AEBODSYS, AEDECOD, name = "n") |>
+  arrange(match(AEBODSYS, soc_order), desc(n)) |>
+  select(soc = AEBODSYS, pt = AEDECOD)
+
+pt_wide <- pt_order |>
+  left_join(pt_wide, by = c("soc", "pt"))
+
+# ── Interleave SOC + PT rows ──
+ae_grade_wide <- bind_rows(
+  lapply(soc_order, function(s) {
+    bind_rows(
+      filter(soc_wide, soc == s),
+      filter(pt_wide, soc == s)
+    )
+  })
+) |>
+  mutate(across(all_of(col_names), ~ replace_na(.x, "0 (0.0)")))
+
+n_vec <- arm_n
+```
+
+### cards
+
+```{r}
+#| label: cards-code
+ae_grade_ard <- ard_stack_hierarchical(
+  data        = adae_teae |> filter(AESEV %in% sev_levels),
+  variables   = c(AEBODSYS, AEDECOD),
+  by          = c(TRT01A, AESEV),
+  denominator = adsl_saf,
+  id          = USUBJID,
+  overall     = FALSE
+) |>
+  sort_ard_hierarchical(sort = "descending")
+
+# Note: cards output has a different layout (AESEV as page_by)
+# than the dplyr path (arm × grade column spans matching DPP shell)
+ae_grade_cards <- fr_wide_ard(
+  ae_grade_ard,
+  statistic = "{n} ({p}%)",
+  decimals  = c(p = 1),
+  label     = c(
+    AEBODSYS = "System Organ Class",
+    AEDECOD  = "Preferred Term"
+  )
+)
+```
+
+:::
+
+
+## arframe Pipeline
+
+The `fr_table()` pipeline for the dplyr path (arm x severity columns with spans):
+
+```{r}
+#| label: pipeline
+#| eval: false
+
+# Build fr_col() list for arm × severity columns
+sev_cols <- unlist(lapply(arm_levels, function(a) {
+  setNames(
+    lapply(sev_levels, function(s) {
+      fr_col(tools::toTitleCase(tolower(s)), align = "decimal")
+    }),
+    paste(gsub(" ", "_", a), sev_levels, sep = "_")
+  )
+}), recursive = FALSE)
+
+ae_grade_wide |>
+  fr_table() |>
+  fr_titles(
+    "Table 14.3.4",
+    "Summary of Treatment-Emergent Adverse Events by SOC, Preferred Term, and Severity Grade",
+    "Safety Population"
+  ) |>
+  fr_cols(
+    soc      = fr_col(visible = FALSE),
+    pt       = fr_col("System Organ Class\n  Preferred Term", width = 3.0),
+    row_type = fr_col(visible = FALSE),
+    !!!sev_cols,
+    .n = n_vec
+  ) |>
+  fr_spans(
+    !!!setNames(
+      lapply(arm_levels, function(a) {
+        paste(gsub(" ", "_", a), sev_levels, sep = "_")
+      }),
+      arm_levels
+    )
+  ) |>
+  fr_header(bold = TRUE, align = "center") |>
+  fr_rows(
+    group_by  = "soc",
+    indent_by = "pt"
+  ) |>
+  fr_styles(
+    fr_row_style(rows = fr_rows_matches("row_type", value = "soc"), bold = TRUE)
+  ) |>
+  fr_footnotes(
+    "TEAE = Treatment-Emergent Adverse Event. Subjects counted once per SOC×grade and once per PT×grade.",
+    "Severity grade: MILD, MODERATE, SEVERE as recorded in AESEV.",
+    "Percentages based on N per treatment arm (Safety Population).",
+    "SOC rows sorted by descending subject frequency; PT rows sorted within SOC by descending frequency."
+  )
+```
+
+
+## Rendered Table
+
+```{r}
+#| label: pre-render
+#| include: false
+
+# Note: The cards path produces a different layout (AESEV as page_by variable)
+# rather than arm×grade columns with spans. The dplyr layout below matches
+# the standard arm×severity column spans layout.
+```
+
+```{r}
+#| label: rendered-table
+#| echo: false
+#| ref.label: pipeline
+```

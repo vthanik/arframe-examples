@@ -1,0 +1,114 @@
+---
+title: "Swimmer Plot"
+subtitle: "Subject Response Over Time"
+execute:
+  echo: true
+  eval: true
+---
+
+
+```{r}
+#| label: prereqs
+#| include: false
+library(arframe)
+fr_theme(hlines = "header", font_family = "Courier New")
+```
+
+## Setup
+
+See [Prerequisites](../install.qmd) for installation instructions.
+
+```{r}
+#| label: setup
+library(arframe)
+library(ggplot2)
+library(pharmaverseadam)
+library(dplyr, warn.conflicts = FALSE)
+library(tidyr)
+
+arm_levels <- c("Placebo", "Xanomeline Low Dose", "Xanomeline High Dose")
+arm_colors <- c("#1b9e77", "#d95f02", "#7570b3")
+
+# Build swimmer data: treatment duration bars + response markers
+adrs <- pharmaverseadam::adrs_onco |>
+  filter(ARM != "Screen Failure", PARAMCD == "OVR") |>
+  mutate(
+    ARM = factor(ARM, levels = arm_levels),
+    DURATION = as.numeric(ADT - TRTSDT) / 30.4375
+  )
+
+# Treatment duration per subject
+subj <- adrs |>
+  group_by(USUBJID, ARM) |>
+  summarise(
+    TRT_START = 0,
+    TRT_END = max(as.numeric(TRTEDT - TRTSDT) / 30.4375, na.rm = TRUE),
+    .groups = "drop"
+  ) |>
+  arrange(ARM, desc(TRT_END)) |>
+  mutate(SUBJ_ORDER = row_number())
+
+# Response events
+events <- adrs |>
+  filter(AVALC %in% c("CR", "PR", "SD", "PD")) |>
+  left_join(subj |> select(USUBJID, SUBJ_ORDER), by = "USUBJID")
+```
+
+
+## Plot Construction
+
+```{r}
+#| label: build-plot
+
+swimmer_plot <- ggplot() +
+  geom_segment(
+    data = subj,
+    aes(x = TRT_START, xend = TRT_END,
+        y = reorder(USUBJID, TRT_END), yend = reorder(USUBJID, TRT_END),
+        color = ARM),
+    linewidth = 3
+  ) +
+  geom_point(
+    data = events,
+    aes(x = DURATION, y = USUBJID, shape = AVALC),
+    size = 2.5
+  ) +
+  scale_shape_manual(values = c("CR" = 16, "PR" = 17, "SD" = 15, "PD" = 4)) +
+  scale_color_manual(values = setNames(arm_colors, arm_levels)) +
+  labs(x = "Time (Months)", y = "", color = "Treatment", shape = "Response") +
+  theme_minimal(base_size = 11) +
+  theme(
+    legend.position = "bottom",
+    panel.grid.major.y = element_blank(),
+    axis.text.y = element_text(size = 7)
+  )
+```
+
+
+## arframe Pipeline
+
+```{r}
+#| label: pipeline
+#| eval: false
+swimmer_plot |>
+  fr_figure(width = 7, height = 6) |>
+  fr_titles(
+    "Figure 14.2.2",
+    "Swimmer Plot for Subject Response Over Time",
+    "Efficacy Population"
+  ) |>
+  fr_footnotes(
+    "Each bar represents one subject's treatment duration.",
+    "Symbols indicate best confirmed response at each assessment.",
+    "CR = Complete Response, PR = Partial Response, SD = Stable Disease, PD = Progressive Disease."
+  )
+```
+
+
+## Rendered Figure
+
+```{r}
+#| label: rendered-figure
+#| echo: false
+#| ref.label: pipeline
+```

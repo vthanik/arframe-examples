@@ -1,0 +1,208 @@
+---
+title: "Installation"
+subtitle: "Get arframe running in under two minutes"
+execute:
+  echo: true
+  eval: false
+---
+
+
+## Install arframe
+
+arframe is hosted on GitHub. The fastest way to install it is with `pak`:
+
+```r
+# Install pak if you don't have it
+install.packages("pak")
+
+# Install arframe from GitHub
+pak::pak("vthanik/arframe")
+```
+
+Or with `remotes`:
+
+```r
+remotes::install_github("vthanik/arframe")
+```
+
+
+## Install pharmaverseadam
+
+The examples in this gallery use the `pharmaverseadam` package, which provides
+synthetic CDISC ADaM datasets (CDISCPILOT01 study, 135 subjects):
+
+```r
+install.packages("pharmaverseadam")
+```
+
+Datasets used in this gallery: `adsl`, `adae`, `adcm`, `advs`, `adlb`, `admh`, `adex`, `adeg`, `adrs_onco`, `adtte_onco`, `adtr_onco`.
+
+
+## Optional: cards
+
+The **Path 2** (cards) examples use `cards` for ARD-based summarisation:
+
+```r
+install.packages("cards")
+```
+
+
+## Optional: Figure Dependencies
+
+The figure examples (Kaplan-Meier, swimmer plot, waterfall plot) use additional packages:
+
+```r
+install.packages(c("ggplot2", "survival", "broom", "scales", "patchwork"))
+```
+
+
+## Verify Your Installation
+
+```{r}
+#| eval: false
+library(arframe)
+library(pharmaverseadam)
+
+# Quick sanity check — build and display a small table
+adsl_saf <- adsl[adsl$SAFFL == "Y" & adsl$TRT01A != "Screen Failure", ]
+
+adsl_saf[, c("TRT01A", "AGE", "SEX")] |>
+  head(10) |>
+  fr_table() |>
+  fr_titles("Quick Check", "First 10 Safety Population Subjects") |>
+  fr_cols(
+    TRT01A = fr_col("Treatment", width = 2.5),
+    AGE    = fr_col("Age",       width = 0.8, align = "center"),
+    SEX    = fr_col("Sex",       width = 0.6, align = "center")
+  ) |>
+  fr_header(bold = TRUE, align = "center")
+```
+
+
+## Minimal End-to-End Example
+
+This is the smallest complete example that produces a publication-ready table:
+
+```{r}
+library(arframe)
+library(dplyr, warn.conflicts = FALSE)
+library(pharmaverseadam)
+
+adsl_saf <- adsl |>
+  filter(SAFFL == "Y", TRT01A != "Screen Failure")
+
+arm_levels <- c("Placebo", "Xanomeline Low Dose", "Xanomeline High Dose")
+
+arm_n <- adsl_saf |>
+  filter(TRT01A %in% arm_levels) |>
+  count(TRT01A) |>
+  pull(n, name = TRT01A)
+
+age_wide <- adsl_saf |>
+  filter(TRT01A %in% arm_levels) |>
+  group_by(TRT01A) |>
+  summarise(
+    n          = as.character(n()),
+    `Mean (SD)` = sprintf("%.1f (%.2f)", mean(AGE), sd(AGE)),
+    Median     = sprintf("%.1f", median(AGE)),
+    `Min, Max` = sprintf("%.0f, %.0f", min(AGE), max(AGE)),
+    .groups    = "drop"
+  ) |>
+  tidyr::pivot_longer(-TRT01A, names_to = "Statistic", values_to = "val") |>
+  tidyr::pivot_wider(names_from = TRT01A, values_from = val)
+
+age_wide |>
+  fr_table() |>
+  fr_titles(
+    "Table 1",
+    "Age Summary",
+    "Safety Population"
+  ) |>
+  fr_cols(
+    Statistic = fr_col("Age (years)", width = 2.0),
+    !!!setNames(
+      lapply(arm_levels, function(a) fr_col(a, align = "decimal")),
+      arm_levels
+    ),
+    .n = arm_n
+  ) |>
+  fr_header(bold = TRUE, align = "center") |>
+  fr_footnotes("Safety Population: all subjects who received at least one dose.")
+```
+
+
+## Render to PDF or RTF
+
+Once you have a `fr_spec` object, render to any format with a single call:
+
+```{r}
+# Assign the spec
+spec <- age_wide |>
+  fr_table() |>
+  fr_titles("Table 1", "Age Summary", "Safety Population") |>
+  fr_cols(
+    Statistic = fr_col("Age (years)", width = 2.0),
+    !!!setNames(
+      lapply(arm_levels, function(a) fr_col(a, align = "decimal")),
+      arm_levels
+    ),
+    .n = arm_n
+  ) |>
+  fr_header(bold = TRUE, align = "center")
+
+# Three formats, zero code changes
+out_pdf  <- file.path(tempdir(), "age_summary.pdf")
+out_rtf  <- file.path(tempdir(), "age_summary.rtf")
+out_html <- file.path(tempdir(), "age_summary.html")
+
+spec |> fr_render(out_pdf)
+spec |> fr_render(out_rtf)
+spec |> fr_render(out_html)
+
+on.exit(unlink(c(out_pdf, out_rtf, out_html)))
+```
+
+
+## Study-Wide Theme
+
+Set a theme once and it applies to every table in the session:
+
+```{r}
+fr_theme(
+  font_size   = 9,
+  font_family = "Courier New",
+  orientation = "landscape",
+  hlines      = "header",
+  n_format    = "{label}\n(N={n})",
+  pagehead    = list(left = "Protocol: CDISCPILOT01", right = "CONFIDENTIAL"),
+  pagefoot    = list(
+    left  = "{program}",
+    right = "Page {thepage} of {total_pages}"
+  ),
+  continuation = "(continued)"
+)
+
+# Reset when done
+fr_theme_reset()
+```
+
+
+## Rendering to PDF / RTF
+
+Every `fr_spec` object can be rendered to PDF, RTF, or HTML with a single call. No code changes needed between formats:
+
+```{r}
+#| eval: false
+spec |> fr_render("output.pdf")
+spec |> fr_render("output.rtf")
+spec |> fr_render("output.html")
+```
+
+PDF rendering requires XeLaTeX. See the [arframe documentation](https://github.com/vthanik/arframe) for font setup details.
+
+
+## Next Steps
+
+- Browse the **Tables** and **Listings** sections in the sidebar for examples.
+- Each table page shows two data preparation approaches: manual dplyr and ARD-based cards.
+- All examples use the `pharmaverseadam` CDISCPILOT01 synthetic datasets.

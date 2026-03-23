@@ -1,0 +1,182 @@
+---
+title: "Adverse Events by Subgroup"
+subtitle: "Treatment-Emergent AE Summary by Age Group"
+execute:
+  echo: true
+  eval: true
+---
+
+
+```{r}
+#| label: prereqs
+#| include: false
+library(arframe)
+fr_theme(hlines = "header", font_family = "Courier New")
+```
+
+## Setup
+
+See [Prerequisites](../install.qmd) for installation instructions.
+
+```{r}
+#| label: setup
+library(arframe)
+library(pharmaverseadam)
+library(dplyr, warn.conflicts = FALSE)
+library(tidyr)
+
+blank_to_na <- function(df) {
+  df[] <- lapply(df, function(x) {
+    if (is.character(x)) x[x == ""] <- NA_character_
+    x
+  })
+  df
+}
+
+adsl_raw <- pharmaverseadam::adsl |>
+  blank_to_na() |>
+  filter(SAFFL == "Y", TRT01A != "Screen Failure")
+
+# Standardize AGEGR1 to <65 / >=65
+adsl_saf <- adsl_raw |>
+  mutate(AGEGR1 = ifelse(AGE < 65, "<65", ">=65"))
+
+# Derive AGEGR1 in adae consistently with adsl
+adae_teae <- pharmaverseadam::adae |>
+  blank_to_na() |>
+  filter(SAFFL == "Y", TRTEMFL == "Y") |>
+  mutate(AGEGR1 = ifelse(AGE < 65, "<65", ">=65"))
+
+arm_levels  <- c("Placebo", "Xanomeline Low Dose", "Xanomeline High Dose")
+agegr_levels <- c("<65", ">=65")
+
+# N per arm x subgroup (denominator)
+arm_agegr_n <- adsl_saf |>
+  filter(TRT01A %in% arm_levels) |>
+  count(TRT01A, AGEGR1) |>
+  filter(AGEGR1 %in% agegr_levels) |>
+  mutate(col_id = paste0(TRT01A, "__", AGEGR1)) |>
+  pull(n, name = col_id)
+```
+
+
+## Data Preparation
+
+::: {.panel-tabset}
+
+### dplyr
+
+```{r}
+#| label: dplyr-code
+
+# ── AE category definitions ──
+ae_categories <- list(
+  list(label = "Any TEAE",                     flag = "TRTEMFL", value = "Y"),
+  list(label = "Any Serious AE (SAE)",          flag = "AESER",   value = "Y"),
+  list(label = "Any AE Leading to Death",       flag = "AESDTH",  value = "Y"),
+  list(label = "Any Related AE",
+       flag = "AEREL", value = "PROBABLE")
+)
+
+# ── Helper: count unique subjects per arm x subgroup for a flag condition ──
+ae_subgroup_row <- function(ae_data, adsl_data, flag_var, flag_value, row_label,
+                             arm_levels, agegr_levels, denominators) {
+  flag_subjs <- ae_data |>
+    filter(.data[[flag_var]] == flag_value) |>
+    distinct(USUBJID, TRT01A, AGEGR1) |>
+    filter(TRT01A %in% arm_levels, AGEGR1 %in% agegr_levels)
+
+  counts <- flag_subjs |>
+    count(TRT01A, AGEGR1, name = "n") |>
+    complete(TRT01A = arm_levels, AGEGR1 = agegr_levels, fill = list(n = 0L)) |>
+    mutate(
+      col_id = paste0(TRT01A, "__", AGEGR1),
+      denom  = denominators[col_id],
+      value  = sprintf("%d (%.1f)", n, n / denom * 100)
+    ) |>
+    select(col_id, value) |>
+    pivot_wider(names_from = col_id, values_from = value)
+
+  counts |> mutate(stat_label = row_label, .before = 1)
+}
+
+ae_subgr_wide <- lapply(ae_categories, function(cat) {
+  ae_subgroup_row(
+    ae_data     = adae_teae,
+    adsl_data   = adsl_saf,
+    flag_var    = cat$flag,
+    flag_value  = cat$value,
+    row_label   = cat$label,
+    arm_levels  = arm_levels,
+    agegr_levels = agegr_levels,
+    denominators = arm_agegr_n
+  )
+}) |>
+  bind_rows() |>
+  mutate(across(where(is.character) & !stat_label, ~ replace_na(.x, "0 (0.0)")))
+
+# ── N-count vector for column headers ──
+n_vec <- arm_agegr_n
+```
+
+:::
+
+
+## arframe Pipeline
+
+The `fr_table()` pipeline for the dplyr path:
+
+```{r}
+#| label: pipeline
+#| eval: false
+
+# Build fr_col() specs: one per arm x subgroup combination
+col_specs <- setNames(
+  lapply(agegr_levels, function(g) fr_col(g, align = "decimal", width = 1.2)),
+  paste0(arm_levels[[1]], "__", agegr_levels)
+)
+for (a in arm_levels[-1]) {
+  more <- setNames(
+    lapply(agegr_levels, function(g) fr_col(g, align = "decimal", width = 1.2)),
+    paste0(a, "__", agegr_levels)
+  )
+  col_specs <- c(col_specs, more)
+}
+
+ae_subgr_wide |>
+  fr_table() |>
+  fr_titles(
+    "Adverse Events by Subgroup",
+    "Treatment-Emergent AE Summary by Age Group",
+    "Safety Population"
+  ) |>
+  fr_cols(
+    stat_label = fr_col("", width = 2.8),
+    !!!col_specs,
+    .n = n_vec
+  ) |>
+  fr_spans(
+    !!!setNames(
+      lapply(arm_levels, function(a) {
+        paste0(a, "__", agegr_levels)
+      }),
+      arm_levels
+    )
+  ) |>
+  fr_header(bold = TRUE, align = "center") |>
+  fr_footnotes(
+    "TEAE = Treatment-Emergent Adverse Event.",
+    "Subjects counted once per AE category.",
+    "Percentages based on N per treatment arm x age group (Safety Population).",
+    "Age group: <65 = under 65 years; >=65 = 65 years or older."
+  )
+```
+
+
+## Rendered Table
+
+```{r}
+#| label: rendered-table
+#| echo: false
+#| ref.label: pipeline
+```

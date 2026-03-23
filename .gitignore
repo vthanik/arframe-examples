@@ -1,0 +1,16 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+*.pdf
+*.rtf
+*.html
+*.log
+*.tex
+*.aux
+presentation/pharmaverse_presentation_files/
+
+docs/
+/.quarto/
+**/*.quarto_ipynb
+*.png

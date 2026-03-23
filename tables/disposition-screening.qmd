@@ -1,0 +1,99 @@
+---
+title: "Disposition - Screening"
+subtitle: "Summary of Subject Screening Status"
+execute:
+  echo: true
+  eval: true
+---
+
+
+```{r}
+#| label: prereqs
+#| include: false
+library(arframe)
+fr_theme(hlines = "header", font_family = "Courier New")
+```
+
+## Setup
+
+See [Prerequisites](../install.qmd) for installation instructions.
+
+```{r}
+#| label: setup
+library(arframe)
+library(pharmaverseadam)
+library(dplyr, warn.conflicts = FALSE)
+
+blank_to_na <- function(df) {
+  df[] <- lapply(df, function(x) {
+    if (is.character(x)) x[x == ""] <- NA_character_
+    x
+  })
+  df
+}
+
+adsl <- pharmaverseadam::adsl |> blank_to_na()
+```
+
+
+## Data Preparation
+
+```{r}
+#| label: data-prep
+N_screened <- nrow(adsl)
+
+screen_fail_n <- sum(adsl$TRT01A == "Screen Failure", na.rm = TRUE)
+enrolled_n    <- sum(adsl$TRT01A != "Screen Failure", na.rm = TRUE)
+randomized_n  <- sum(!is.na(adsl$RANDDT))
+
+screen_wide <- data.frame(
+  stat_label = c(
+    "Screened",
+    "Screen Failures",
+    "Enrolled",
+    "Randomized"
+  ),
+  value = c(
+    sprintf("%d", N_screened),
+    sprintf("%d (%.1f)", screen_fail_n, screen_fail_n / N_screened * 100),
+    sprintf("%d (%.1f)", enrolled_n, enrolled_n / N_screened * 100),
+    sprintf("%d (%.1f)", randomized_n, randomized_n / N_screened * 100)
+  ),
+  stringsAsFactors = FALSE
+)
+```
+
+
+## arframe Pipeline
+
+The `fr_table()` pipeline is the same regardless of how the data was prepared:
+
+```{r}
+#| label: pipeline
+#| eval: false
+screen_wide |>
+  fr_table() |>
+  fr_titles(
+    "Table 14.1.1",
+    "Summary of Subject Screening Status",
+    "All Subjects"
+  ) |>
+  fr_cols(
+    stat_label = fr_col("", width = 3.0),
+    value      = fr_col("n (%)", align = "decimal", width = 2.0)
+  ) |>
+  fr_header(bold = TRUE, align = "center") |>
+  fr_footnotes(
+    "Percentages based on total screened subjects.",
+    "CDISCPILOT01 All Subjects."
+  )
+```
+
+
+## Rendered Table
+
+```{r}
+#| label: table
+#| echo: false
+#| ref.label: pipeline
+```

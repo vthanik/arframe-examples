@@ -1,0 +1,232 @@
+---
+title: "Best Overall Response"
+subtitle: "Objective Response Rate Summary"
+execute:
+  echo: true
+  eval: true
+---
+
+
+```{r}
+#| label: prereqs
+#| include: false
+library(arframe)
+fr_theme(hlines = "header", font_family = "Courier New")
+```
+
+## Setup
+
+See [Prerequisites](../install.qmd) for installation instructions.
+
+```{r}
+#| label: setup
+library(arframe)
+library(pharmaverseadam)
+library(dplyr, warn.conflicts = FALSE)
+library(tidyr)
+library(cards)
+
+blank_to_na <- function(df) {
+  df[] <- lapply(df, function(x) {
+    if (is.character(x)) x[x == ""] <- NA_character_
+    x
+  })
+  df
+}
+
+# Oncology response dataset: one record per subject for Best Overall Response
+adrs_bor <- pharmaverseadam::adrs_onco |>
+  blank_to_na() |>
+  filter(PARAMCD == "BOR", ARM != "Screen Failure")
+
+arm_levels <- c("Placebo", "Xanomeline Low Dose", "Xanomeline High Dose")
+
+# N per arm = evaluable subjects (one row per subject in BOR parameter)
+arm_n <- adrs_bor |>
+  filter(ARM %in% arm_levels) |>
+  count(ARM) |>
+  pull(n, name = ARM)
+arm_n <- arm_n[arm_levels]
+```
+
+
+## Data Preparation
+
+::: {.panel-tabset}
+
+### dplyr
+
+```{r}
+#| label: dplyr-code
+
+# Clinical response order for BOR categories
+bor_levels <- c("CR", "PR", "SD", "NON-CR/NON-PD", "PD", "NE", "MISSING")
+
+# ── Per-arm counts: one subject per BOR category ──
+bor_counts <- adrs_bor |>
+  filter(ARM %in% arm_levels) |>
+  mutate(AVALC = factor(AVALC, levels = bor_levels)) |>
+  count(ARM, AVALC, .drop = FALSE) |>
+  group_by(ARM) |>
+  mutate(N = sum(n)) |>
+  ungroup() |>
+  mutate(value = if_else(n == 0, "0", sprintf("%d (%.1f)", n, n / N * 100))) |>
+  select(ARM, AVALC, value) |>
+  pivot_wider(names_from = ARM, values_from = value)
+
+# ── Derived rows: ORR = CR + PR, DCR = CR + PR + SD + NON-CR/NON-PD ──
+derive_rate <- function(data, categories, arm_levels) {
+  data |>
+    filter(AVALC %in% categories) |>
+    group_by(ARM) |>
+    summarise(n = sum(n), N = first(N), .groups = "drop") |>
+    mutate(value = sprintf("%d (%.1f)", n, n / N * 100)) |>
+    select(ARM, value) |>
+    pivot_wider(names_from = ARM, values_from = value)
+}
+
+# Raw counts needed for derived row calculation
+bor_raw <- adrs_bor |>
+  filter(ARM %in% arm_levels) |>
+  mutate(AVALC = factor(AVALC, levels = bor_levels)) |>
+  count(ARM, AVALC, .drop = FALSE) |>
+  group_by(ARM) |>
+  mutate(N = sum(n)) |>
+  ungroup()
+
+orr_wide <- derive_rate(bor_raw, c("CR", "PR"), arm_levels) |>
+  mutate(AVALC = "Objective Response Rate (CR + PR)", row_type = "derived", .before = 1)
+
+dcr_wide <- derive_rate(bor_raw, c("CR", "PR", "SD", "NON-CR/NON-PD"), arm_levels) |>
+  mutate(AVALC = "Disease Control Rate (CR + PR + SD)", row_type = "derived", .before = 1)
+
+# ── Blank separator row ──
+blank_row <- tibble(
+  AVALC    = "",
+  row_type = "blank",
+  !!!setNames(rep(list(""), length(arm_levels)), arm_levels)
+)
+
+# ── Combine: BOR categories + blank + derived rows ──
+bor_wide <- bor_counts |>
+  mutate(row_type = "category") |>
+  bind_rows(blank_row, orr_wide, dcr_wide) |>
+  rename(response = AVALC) |>
+  select(response, row_type, all_of(arm_levels))
+```
+
+### cards
+
+```{r}
+#| label: cards-code
+
+# ── ARD for BOR categorical counts ──
+bor_ard <- ard_categorical(
+  data      = adrs_bor |> filter(ARM %in% arm_levels),
+  variables = AVALC,
+  by        = ARM
+)
+
+# Extract per-arm n and N for derived calculations
+bor_n_per_arm <- adrs_bor |>
+  filter(ARM %in% arm_levels) |>
+  count(ARM, name = "N")
+
+bor_cat_wide <- fr_wide_ard(
+  bor_ard,
+  statistic = list(categorical = "{n} ({p}%)"),
+  decimals  = c(p = 1)
+)
+
+# Reorder categories and rename to response
+bor_levels <- c("CR", "PR", "SD", "NON-CR/NON-PD", "PD", "NE", "MISSING")
+
+bor_cat_wide <- bor_cat_wide |>
+  mutate(stat_label = factor(stat_label, levels = bor_levels)) |>
+  arrange(stat_label) |>
+  mutate(stat_label = as.character(stat_label)) |>
+  rename(response = stat_label) |>
+  select(-variable) |>
+  mutate(row_type = "category")
+
+# ── Manually compute ORR and DCR derived rows ──
+derive_rate_cards <- function(data, arm_n_df, categories, label) {
+  # Use the raw ARD to sum n for given categories; unlist list-typed ARD columns
+  sub <- bor_ard |>
+    dplyr::filter(
+      unlist(variable_level) %in% categories,
+      stat_name == "n"
+    ) |>
+    dplyr::mutate(
+      ARM  = unlist(group1_level),
+      n_val = as.integer(unlist(stat))
+    ) |>
+    dplyr::group_by(ARM) |>
+    dplyr::summarise(n = sum(n_val), .groups = "drop") |>
+    dplyr::left_join(arm_n_df, by = "ARM") |>
+    dplyr::mutate(value = sprintf("%d (%.1f)", n, n / N * 100)) |>
+    dplyr::select(ARM, value) |>
+    tidyr::pivot_wider(names_from = ARM, values_from = value)
+  sub |>
+    dplyr::mutate(response = label, row_type = "derived", .before = 1)
+}
+
+orr_cards <- derive_rate_cards(bor_ard, bor_n_per_arm, c("CR", "PR"),
+                               "Objective Response Rate (CR + PR)")
+dcr_cards <- derive_rate_cards(bor_ard, bor_n_per_arm, c("CR", "PR", "SD", "NON-CR/NON-PD"),
+                               "Disease Control Rate (CR + PR + SD)")
+
+blank_row_cards <- tibble(
+  response = "",
+  row_type = "blank",
+  !!!setNames(rep(list(""), length(arm_levels)), arm_levels)
+)
+
+bor_cards <- bind_rows(bor_cat_wide, blank_row_cards, orr_cards, dcr_cards) |>
+  select(response, row_type, all_of(arm_levels))
+```
+
+:::
+
+
+## arframe Pipeline
+
+```{r}
+#| label: pipeline
+#| eval: false
+bor_wide |>
+  fr_table() |>
+  fr_titles(
+    "Best Overall Response",
+    "Objective Response Rate Summary",
+    "Evaluable Population"
+  ) |>
+  fr_cols(
+    response = fr_col("Response Category", width = 3.0),
+    row_type = fr_col(visible = FALSE),
+    !!!setNames(
+      lapply(arm_levels, function(a) fr_col(a, align = "decimal")),
+      arm_levels
+    ),
+    .n = arm_n
+  ) |>
+  fr_header(bold = TRUE, align = "center") |>
+  fr_styles(
+    fr_row_style(rows = fr_rows_matches("row_type", value = "derived"), bold = TRUE)
+  ) |>
+  fr_footnotes(
+    "ORR = Objective Response Rate: proportion of subjects with CR or PR as best overall response.",
+    "DCR = Disease Control Rate: proportion of subjects with CR, PR, SD, or NON-CR/NON-PD.",
+    "NON-CR/NON-PD applies to subjects with non-measurable disease at baseline.",
+    "Percentages based on the number of evaluable subjects per treatment arm."
+  )
+```
+
+
+## Rendered Table
+
+```{r}
+#| label: rendered-table
+#| echo: false
+#| ref.label: pipeline
+```

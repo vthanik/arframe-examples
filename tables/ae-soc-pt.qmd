@@ -1,0 +1,262 @@
+---
+title: "Adverse Events by System Organ Class and Preferred Term"
+subtitle: "Summary of Treatment-Emergent Adverse Events by SOC and PT"
+execute:
+  echo: true
+  eval: true
+---
+
+
+```{r}
+#| label: prereqs
+#| include: false
+library(arframe)
+fr_theme(hlines = "header", font_family = "Courier New")
+```
+
+## Setup
+
+See [Prerequisites](../install.qmd) for installation instructions.
+
+```{r}
+#| label: setup
+library(arframe)
+library(pharmaverseadam)
+library(dplyr, warn.conflicts = FALSE)
+library(tidyr)
+library(cards)
+
+blank_to_na <- function(df) {
+  df[] <- lapply(df, function(x) {
+    if (is.character(x)) x[x == ""] <- NA_character_
+    x
+  })
+  df
+}
+
+adsl_saf <- pharmaverseadam::adsl |>
+  blank_to_na() |>
+  filter(SAFFL == "Y", TRT01A != "Screen Failure")
+
+adae_teae <- pharmaverseadam::adae |>
+  blank_to_na() |>
+  filter(TRTEMFL == "Y", TRT01A != "Screen Failure")
+
+arm_levels <- c("Placebo", "Xanomeline Low Dose", "Xanomeline High Dose")
+
+arm_n <- adsl_saf |>
+  filter(TRT01A %in% arm_levels) |>
+  count(TRT01A) |>
+  pull(n, name = TRT01A)
+arm_n <- arm_n[arm_levels]
+```
+
+
+## Data Preparation
+
+::: {.panel-tabset}
+
+### dplyr
+
+```{r}
+#| label: dplyr-code
+
+# ── Helper: n (%) string ──
+n_pct <- function(n, denom) sprintf("%d (%.1f)", n, n / denom * 100)
+
+# ── Denominators ──
+N_total <- nrow(adsl_saf)
+N_arm   <- arm_n
+
+# ── Any TEAE (overall row) ──
+any_teae_arm <- adae_teae |>
+  distinct(USUBJID, TRT01A) |>
+  count(TRT01A) |>
+  filter(TRT01A %in% arm_levels) |>
+  mutate(value = mapply(n_pct, n, N_arm[TRT01A])) |>
+  select(TRT01A, value) |>
+  pivot_wider(names_from = TRT01A, values_from = value)
+
+any_teae_total <- adae_teae |>
+  distinct(USUBJID) |>
+  nrow() |>
+  (\(n) tibble(Total = n_pct(n, N_total)))()
+
+any_teae_row <- bind_cols(
+  tibble(soc = "TOTAL SUBJECTS WITH AN EVENT", pt = "TOTAL SUBJECTS WITH AN EVENT", row_type = "overall"),
+  any_teae_arm,
+  any_teae_total
+)
+
+# ── SOC-level summary (one subject counted once per SOC) ──
+soc_arm <- adae_teae |>
+  distinct(USUBJID, TRT01A, AEBODSYS) |>
+  count(TRT01A, AEBODSYS) |>
+  filter(TRT01A %in% arm_levels) |>
+  mutate(value = mapply(n_pct, n, N_arm[TRT01A])) |>
+  select(TRT01A, AEBODSYS, value) |>
+  pivot_wider(names_from = TRT01A, values_from = value)
+
+soc_total <- adae_teae |>
+  distinct(USUBJID, AEBODSYS) |>
+  count(AEBODSYS) |>
+  mutate(Total = n_pct(n, N_total)) |>
+  select(AEBODSYS, Total)
+
+soc_arm <- soc_arm |>
+  mutate(across(all_of(arm_levels), ~ replace_na(.x, "0 (0.0)")))
+
+soc_wide <- left_join(soc_arm, soc_total, by = "AEBODSYS") |>
+  mutate(
+    soc      = AEBODSYS,
+    pt       = AEBODSYS,
+    row_type = "soc",
+    .before  = 1
+  ) |>
+  select(-AEBODSYS)
+
+# ── PT-level summary (one subject counted once per SOC/PT) ──
+pt_arm <- adae_teae |>
+  distinct(USUBJID, TRT01A, AEBODSYS, AEDECOD) |>
+  count(TRT01A, AEBODSYS, AEDECOD) |>
+  filter(TRT01A %in% arm_levels) |>
+  mutate(value = mapply(n_pct, n, N_arm[TRT01A])) |>
+  select(TRT01A, AEBODSYS, AEDECOD, value) |>
+  pivot_wider(names_from = TRT01A, values_from = value)
+
+pt_total <- adae_teae |>
+  distinct(USUBJID, AEBODSYS, AEDECOD) |>
+  count(AEBODSYS, AEDECOD) |>
+  mutate(Total = n_pct(n, N_total)) |>
+  select(AEBODSYS, AEDECOD, Total)
+
+pt_arm <- pt_arm |>
+  mutate(across(all_of(arm_levels), ~ replace_na(.x, "0 (0.0)")))
+
+pt_wide <- left_join(pt_arm, pt_total, by = c("AEBODSYS", "AEDECOD")) |>
+  mutate(
+    soc      = AEBODSYS,
+    pt       = AEDECOD,
+    row_type = "pt",
+    .before  = 1
+  ) |>
+  select(-AEBODSYS, -AEDECOD)
+
+# ── Compute sort order: SOC frequency descending, PT frequency descending ──
+soc_order <- soc_wide |>
+  left_join(
+    adae_teae |>
+      distinct(USUBJID, AEBODSYS) |>
+      count(AEBODSYS, name = "soc_n"),
+    by = c("soc" = "AEBODSYS")
+  ) |>
+  arrange(desc(soc_n)) |>
+  pull(soc)
+
+pt_order <- pt_wide |>
+  left_join(
+    adae_teae |>
+      distinct(USUBJID, AEBODSYS, AEDECOD) |>
+      count(AEBODSYS, AEDECOD, name = "pt_n"),
+    by = c("soc" = "AEBODSYS", "pt" = "AEDECOD")
+  ) |>
+  arrange(match(soc, soc_order), desc(pt_n))
+
+# ── Interleave SOC header row + PT rows, sorted ──
+ae_wide <- bind_rows(
+  any_teae_row,
+  bind_rows(
+    lapply(soc_order, function(s) {
+      soc_row <- filter(soc_wide, soc == s)
+      pt_rows  <- filter(pt_order, soc == s)
+      bind_rows(soc_row, pt_rows)
+    })
+  )
+) |>
+  mutate(across(
+    where(is.character) & !c(soc, pt, row_type),
+    ~ replace_na(.x, "0 (0.0)")
+  ))
+
+n_vec <- c(arm_n, Total = N_total)
+```
+
+### cards
+
+```{r}
+#| label: cards-code
+ae_ard <- ard_stack_hierarchical(
+  data        = adae_teae,
+  variables   = c(AEBODSYS, AEDECOD),
+  by          = TRT01A,
+  denominator = adsl_saf,
+  id          = USUBJID,
+  overall     = TRUE,
+  over_variables = TRUE
+) |>
+  sort_ard_hierarchical(sort = "descending")
+
+ae_wide <- fr_wide_ard(
+  ae_ard,
+  statistic = "{n} ({p}%)",
+  decimals  = c(p = 1),
+  label     = c(
+    "..ard_hierarchical_overall.." = "TOTAL SUBJECTS WITH AN EVENT",
+    AEBODSYS = "System Organ Class",
+    AEDECOD  = "Preferred Term"
+  )
+)
+```
+
+:::
+
+
+## arframe Pipeline
+
+The `fr_table()` pipeline for the dplyr path:
+
+```{r}
+#| label: pipeline
+#| eval: false
+ae_wide |>
+  fr_table() |>
+  fr_titles(
+    "Table 14.3.1",
+    "Summary of Treatment-Emergent Adverse Events by System Organ Class and Preferred Term",
+    "Safety Population"
+  ) |>
+  fr_cols(
+    soc      = fr_col(visible = FALSE),
+    pt       = fr_col("System Organ Class\n  Preferred Term", width = 3.5),
+    row_type = fr_col(visible = FALSE),
+    !!!setNames(
+      lapply(arm_levels, function(a) fr_col(a, align = "decimal")),
+      arm_levels
+    ),
+    Total = fr_col("Total", align = "decimal"),
+    .n = n_vec
+  ) |>
+  fr_header(bold = TRUE, align = "center") |>
+  fr_rows(
+    group_by  = "soc",
+    indent_by = "pt"
+  ) |>
+  fr_styles(
+    fr_row_style(rows = fr_rows_matches("row_type", value = "soc"), bold = TRUE),
+    fr_row_style(rows = fr_rows_matches("row_type", value = "overall"), bold = TRUE)
+  ) |>
+  fr_footnotes(
+    "TEAE = Treatment-Emergent Adverse Event. Subjects are counted once per SOC and once per PT.",
+    "Percentages based on N per treatment arm (Safety Population).",
+    "SOC rows sorted by descending subject frequency; PT rows sorted within SOC by descending frequency."
+  )
+```
+
+
+## Rendered Table
+
+```{r}
+#| label: rendered-table
+#| echo: false
+#| ref.label: pipeline
+```

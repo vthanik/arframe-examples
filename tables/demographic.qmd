@@ -1,0 +1,186 @@
+---
+title: "Demographics Summary"
+subtitle: "Summary of Demographic and Baseline Characteristics"
+execute:
+  echo: true
+  eval: true
+---
+
+
+```{r}
+#| label: prereqs
+#| include: false
+library(arframe)
+fr_theme(hlines = "header", font_family = "Courier New")
+```
+
+## Setup
+
+See [Prerequisites](../install.qmd) for installation instructions.
+
+```{r}
+#| label: setup
+library(arframe)
+library(pharmaverseadam)
+library(dplyr, warn.conflicts = FALSE)
+library(tidyr)
+library(cards)
+
+blank_to_na <- function(df) {
+  df[] <- lapply(df, function(x) {
+    if (is.character(x)) x[x == ""] <- NA_character_
+    x
+  })
+  df
+}
+
+adsl_saf <- pharmaverseadam::adsl |>
+  blank_to_na() |>
+  filter(SAFFL == "Y", TRT01A != "Screen Failure")
+
+arm_n <- adsl_saf |> count(TRT01A) |> pull(n, name = TRT01A)
+arm_levels <- names(arm_n)
+n_vec <- c(arm_n, Total = sum(arm_n))
+```
+
+
+## Data Preparation
+
+::: {.panel-tabset}
+
+### dplyr
+
+```{r}
+#| label: dplyr-code
+
+# ── Continuous: Age ──
+age_stats <- adsl_saf |>
+  group_by(TRT01A) |>
+  summarise(
+    n          = as.character(n()),
+    `Mean (SD)` = sprintf("%.1f (%.2f)", mean(AGE), sd(AGE)),
+    Median     = sprintf("%.1f", median(AGE)),
+    `Min, Max` = sprintf("%.0f, %.0f", min(AGE), max(AGE)),
+    .groups = "drop"
+  ) |>
+  pivot_longer(-TRT01A, names_to = "stat_label", values_to = "value") |>
+  pivot_wider(names_from = TRT01A, values_from = value) |>
+  mutate(variable = "Age (years)", .before = 1)
+
+# ── Total column for Age ──
+age_total <- adsl_saf |>
+  summarise(
+    n          = as.character(n()),
+    `Mean (SD)` = sprintf("%.1f (%.2f)", mean(AGE), sd(AGE)),
+    Median     = sprintf("%.1f", median(AGE)),
+    `Min, Max` = sprintf("%.0f, %.0f", min(AGE), max(AGE))
+  ) |>
+  pivot_longer(everything(), names_to = "stat_label", values_to = "Total")
+
+age_wide <- left_join(age_stats, age_total, by = "stat_label")
+
+# ── Categorical helper ──
+cat_summary <- function(data, var, var_label) {
+  by_arm <- data |>
+    count(TRT01A, .data[[var]]) |>
+    group_by(TRT01A) |>
+    mutate(pct = sprintf("%d (%.1f)", n, n / sum(n) * 100)) |>
+    ungroup() |>
+    select(TRT01A, stat_label = all_of(var), pct) |>
+    pivot_wider(names_from = TRT01A, values_from = pct)
+
+  total <- data |>
+    count(.data[[var]]) |>
+    mutate(Total = sprintf("%d (%.1f)", n, n / nrow(data) * 100)) |>
+    select(stat_label = all_of(var), Total)
+
+  left_join(by_arm, total, by = "stat_label") |>
+    mutate(variable = var_label, .before = 1)
+}
+
+sex_wide  <- cat_summary(adsl_saf, "SEX", "Sex, n (%)")
+race_wide <- cat_summary(adsl_saf, "RACE", "Race, n (%)")
+eth_wide  <- cat_summary(adsl_saf, "ETHNIC", "Ethnicity, n (%)")
+
+# ── Combine ──
+demog_wide <- bind_rows(age_wide, sex_wide, race_wide, eth_wide) |>
+  mutate(across(where(is.character) & !c(variable, stat_label),
+                ~ replace_na(.x, "0 (0.0)")))
+```
+
+### cards
+
+```{r}
+#| label: cards-code
+demog_ard <- ard_stack(
+  data = adsl_saf,
+  .by = "TRT01A",
+  ard_continuous(variables = "AGE"),
+  ard_categorical(variables = c("SEX", "RACE", "ETHNIC")),
+  .overall = TRUE
+)
+
+demog_wide <- fr_wide_ard(
+  demog_ard,
+  statistic = list(
+    continuous = c(
+      "n"         = "{N}",
+      "Mean (SD)" = "{mean} ({sd})",
+      "Median"    = "{median}",
+      "Min, Max"  = "{min}, {max}"
+    ),
+    categorical = "{n} ({p}%)"
+  ),
+  decimals = c(mean = 1, sd = 2, median = 1, p = 1),
+  label = c(
+    AGE    = "Age (years)",
+    SEX    = "Sex, n (%)",
+    RACE   = "Race, n (%)",
+    ETHNIC = "Ethnicity, n (%)"
+  )
+)
+```
+
+:::
+
+
+## arframe Pipeline
+
+```{r}
+#| label: pipeline
+#| eval: false
+demog_wide |>
+  fr_table() |>
+  fr_titles(
+    "Table 14.1.1",
+    "Summary of Demographic and Baseline Characteristics",
+    "Safety Population"
+  ) |>
+  fr_cols(
+    variable   = fr_col(visible = FALSE),
+    stat_label = fr_col("", width = 2.5),
+    !!!setNames(
+      lapply(arm_levels, function(a) fr_col(a, align = "decimal")),
+      arm_levels
+    ),
+    Total = fr_col("Total", align = "decimal"),
+    .n = n_vec
+  ) |>
+  fr_header(bold = TRUE, align = "center") |>
+  fr_rows(
+    group_by = "variable",
+    group_label = "stat_label",
+    group_bold = TRUE,
+    blank_after = "variable"
+  ) |>
+  fr_footnotes(
+    "Percentages based on N per treatment group.",
+    "CDISCPILOT01 Safety Population."
+  )
+```
+
+```{r}
+#| label: table
+#| echo: false
+#| ref.label: pipeline
+```

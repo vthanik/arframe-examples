@@ -1,0 +1,159 @@
+---
+title: "Death Summary"
+subtitle: "Summary of Deaths"
+execute:
+  echo: true
+  eval: true
+---
+
+
+```{r}
+#| label: prereqs
+#| include: false
+library(arframe)
+fr_theme(hlines = "header", font_family = "Courier New")
+```
+
+## Setup
+
+See [Prerequisites](../install.qmd) for installation instructions.
+
+```{r}
+#| label: setup
+library(arframe)
+library(pharmaverseadam)
+library(dplyr, warn.conflicts = FALSE)
+library(tidyr)
+
+blank_to_na <- function(df) {
+  df[] <- lapply(df, function(x) {
+    if (is.character(x)) x[x == ""] <- NA_character_
+    x
+  })
+  df
+}
+
+adsl_saf <- pharmaverseadam::adsl |>
+  blank_to_na() |>
+  filter(SAFFL == "Y", TRT01A != "Screen Failure")
+
+arm_levels <- c("Placebo", "Xanomeline Low Dose", "Xanomeline High Dose")
+arm_n <- setNames(
+  vapply(arm_levels, function(a) sum(adsl_saf$TRT01A == a), integer(1L)),
+  arm_levels
+)
+N_total <- nrow(adsl_saf)
+n_vec   <- c(arm_n, Total = N_total)
+```
+
+
+## Data Preparation
+
+```{r}
+#| label: data-prep
+
+# ── Deaths overall ──
+death_by_arm <- adsl_saf |>
+  group_by(TRT01A) |>
+  summarise(
+    n   = sum(DTHFL == "Y", na.rm = TRUE),
+    N   = n(),
+    pct = sprintf("%d (%.1f)", n, n / N * 100),
+    .groups = "drop"
+  ) |>
+  select(TRT01A, pct) |>
+  pivot_wider(names_from = TRT01A, values_from = pct)
+
+total_deaths <- sum(adsl_saf$DTHFL == "Y", na.rm = TRUE)
+death_overall <- death_by_arm |>
+  mutate(
+    category   = "Deaths",
+    stat_label = "Deaths, n (%)",
+    Total      = sprintf("%d (%.1f)", total_deaths, total_deaths / N_total * 100),
+    .before    = 1
+  )
+
+# ── Deaths by cause (DTHCAUS) ──
+adsl_deaths <- adsl_saf |>
+  filter(DTHFL == "Y") |>
+  mutate(DTHCAUS = if_else(is.na(DTHCAUS), "Unknown", DTHCAUS))
+
+cause_levels <- sort(unique(adsl_deaths$DTHCAUS))
+
+cause_rows <- lapply(cause_levels, function(cause) {
+  by_arm <- adsl_saf |>
+    group_by(TRT01A) |>
+    summarise(
+      n   = sum(DTHFL == "Y" & DTHCAUS == cause, na.rm = TRUE),
+      N   = n(),
+      pct = sprintf("%d (%.1f)", n, n / N * 100),
+      .groups = "drop"
+    ) |>
+    select(TRT01A, pct) |>
+    pivot_wider(names_from = TRT01A, values_from = pct)
+
+  total_n <- sum(adsl_saf$DTHFL == "Y" & adsl_saf$DTHCAUS == cause, na.rm = TRUE)
+  by_arm |>
+    mutate(
+      category   = "Cause of Death",
+      stat_label = tools::toTitleCase(tolower(cause)),
+      Total      = sprintf("%d (%.1f)", total_n, total_n / N_total * 100),
+      .before    = 1
+    )
+})
+
+# ── Combine ──
+death_wide <- bind_rows(death_overall, bind_rows(cause_rows)) |>
+  mutate(across(
+    all_of(c(arm_levels, "Total")),
+    ~ replace_na(.x, "0 (0.0)")
+  ))
+```
+
+
+## arframe Pipeline
+
+The `fr_table()` pipeline is the same regardless of how the data was prepared:
+
+```{r}
+#| label: pipeline
+#| eval: false
+death_wide |>
+  fr_table() |>
+  fr_titles(
+    "Table 14.3.1",
+    "Summary of Deaths",
+    "Safety Population"
+  ) |>
+  fr_cols(
+    category   = fr_col(visible = FALSE),
+    stat_label = fr_col("", width = 2.8),
+    !!!setNames(
+      lapply(arm_levels, function(a) fr_col(a, align = "decimal")),
+      arm_levels
+    ),
+    Total = fr_col("Total", align = "decimal"),
+    .n = n_vec
+  ) |>
+  fr_header(bold = TRUE, align = "center") |>
+  fr_rows(
+    group_by    = "category",
+    group_label = "stat_label",
+    group_bold  = TRUE,
+    blank_after = "category"
+  ) |>
+  fr_footnotes(
+    "Percentages based on N per treatment group.",
+    "Death cause derived from ADSL DTHCAUS variable.",
+    "CDISCPILOT01 Safety Population."
+  )
+```
+
+
+## Rendered Table
+
+```{r}
+#| label: table
+#| echo: false
+#| ref.label: pipeline
+```

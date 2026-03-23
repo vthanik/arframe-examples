@@ -1,0 +1,110 @@
+---
+title: "Laboratory Test Results Listing"
+subtitle: "Subject-Level Laboratory Results"
+execute:
+  echo: true
+  eval: true
+---
+
+
+```{r}
+#| label: prereqs
+#| include: false
+library(arframe)
+fr_theme(hlines = "header", font_family = "Courier New")
+```
+
+## Setup
+
+See [Prerequisites](../install.qmd) for installation instructions.
+
+```{r}
+#| label: setup
+library(arframe)
+library(pharmaverseadam)
+library(dplyr, warn.conflicts = FALSE)
+
+blank_to_na <- function(df) {
+  df[] <- lapply(df, function(x) {
+    if (is.character(x)) x[x == ""] <- NA_character_
+    x
+  })
+  df
+}
+
+arm_levels <- c("Placebo", "Xanomeline Low Dose", "Xanomeline High Dose")
+
+chem_params <- c("ALT", "AST", "BILI", "CREAT")
+
+lab_listing <- pharmaverseadam::adlb |>
+  blank_to_na() |>
+  filter(
+    SAFFL == "Y",
+    TRT01A %in% arm_levels,
+    PARCAT1 == "CHEMISTRY",
+    PARAMCD %in% chem_params
+  ) |>
+  mutate(
+    TRT01A = factor(TRT01A, levels = arm_levels),
+    AVAL_C = if_else(is.na(AVAL), NA_character_, sprintf("%.1f", AVAL)),
+    BASE_C = if_else(is.na(BASE), NA_character_, sprintf("%.1f", BASE)),
+    CHG_C  = if_else(is.na(CHG),  NA_character_, sprintf("%.1f", CHG))
+  ) |>
+  arrange(TRT01A, USUBJID, PARAMCD, AVISITN) |>
+  slice_head(n = 200) |>
+  select(
+    TRT01A,
+    USUBJID,
+    PARAM,
+    AVISIT,
+    AVAL_C,
+    BASE_C,
+    CHG_C,
+    ANRIND
+  )
+```
+
+
+## arframe Pipeline
+
+```{r}
+#| label: pipeline
+#| eval: false
+lab_listing |>
+  fr_table() |>
+  fr_titles(
+    "Listing 16.2.8",
+    "Laboratory Test Results - Chemistry",
+    "Safety Population"
+  ) |>
+  fr_cols(
+    TRT01A  = fr_col(visible = FALSE),
+    USUBJID = fr_col("Subject ID",         width = 1.2),
+    PARAM   = fr_col("Parameter",          width = 2.4),
+    AVISIT  = fr_col("Visit",              width = 1.5),
+    AVAL_C  = fr_col("Result",             width = 1.0, align = "decimal"),
+    BASE_C  = fr_col("Baseline",           width = 1.0, align = "decimal"),
+    CHG_C   = fr_col("Change from\nBaseline", width = 1.1, align = "decimal"),
+    ANRIND  = fr_col("Normal\nRange Flag", width = 1.0, align = "center")
+  ) |>
+  fr_header(bold = TRUE, align = "center") |>
+  fr_rows(page_by = "TRT01A", sort_by = c("USUBJID", "PARAM", "AVISIT"), repeat_cols = c("USUBJID", "PARAM")) |>
+  fr_footnotes(
+    "Safety Population: all randomised subjects who received at least one dose of study medication.",
+    "Parameters: ALT = Alanine Aminotransferase, AST = Aspartate Aminotransferase, BILI = Bilirubin, CREAT = Creatinine.",
+    "Result and Baseline are in original measurement units. Change from Baseline = Result minus Baseline.",
+    "Normal Range Flag (ANRIND): HIGH = above upper limit of normal, LOW = below lower limit of normal, NORMAL = within range.",
+    "First 200 records shown. Sorted by treatment arm, subject identifier, parameter, and visit."
+  )
+```
+
+
+## Rendered Listing
+
+Pages are separated by treatment arm using `page_by`. Numeric columns use `align = "decimal"` for alignment on the decimal point. Values are pre-formatted to one decimal place in data preparation.
+
+```{r}
+#| label: lab-listing
+#| echo: false
+#| ref.label: pipeline
+```

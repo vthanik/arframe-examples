@@ -1,0 +1,108 @@
+---
+title: "Vital Signs Listing"
+subtitle: "Listing of Vital Signs by Subject and Parameter"
+execute:
+  echo: true
+  eval: true
+---
+
+
+```{r}
+#| label: prereqs
+#| include: false
+library(arframe)
+fr_theme(hlines = "header", font_family = "Courier New")
+```
+
+## Setup
+
+See [Prerequisites](../install.qmd) for installation instructions.
+
+```{r}
+#| label: setup
+library(arframe)
+library(pharmaverseadam)
+library(dplyr, warn.conflicts = FALSE)
+
+blank_to_na <- function(df) {
+  df[] <- lapply(df, function(x) {
+    if (is.character(x)) x[x == ""] <- NA_character_
+    x
+  })
+  df
+}
+
+arm_levels <- c("Placebo", "Xanomeline Low Dose", "Xanomeline High Dose")
+
+# On-treatment vital sign records; exclude derived DTYPE rows
+vs_listing <- pharmaverseadam::advs |>
+  blank_to_na() |>
+  filter(
+    ONTRTFL == "Y",
+    TRT01A %in% arm_levels,
+    is.na(DTYPE)           # exclude derived records (e.g., LOCF)
+  ) |>
+  mutate(
+    TRT01A  = factor(TRT01A, levels = arm_levels),
+    PARAMCD = factor(PARAMCD),
+    # Format numeric columns to 1 decimal place
+    AVAL_C  = sprintf("%.1f", AVAL),
+    BASE_C  = if_else(is.na(BASE), NA_character_, sprintf("%.1f", BASE)),
+    CHG_C   = if_else(is.na(CHG),  NA_character_, sprintf("%.1f", CHG))
+  ) |>
+  arrange(PARAMCD, TRT01A, USUBJID, AVISITN) |>
+  select(
+    PARAMCD,
+    PARAM,
+    TRT01A,
+    USUBJID,
+    AVISIT,
+    AVAL_C,
+    BASE_C,
+    CHG_C
+  )
+```
+
+
+## arframe Pipeline
+
+```{r}
+#| label: pipeline
+#| eval: false
+vs_listing |>
+  fr_table() |>
+  fr_titles(
+    "Listing 16.2.8.1",
+    "Listing of Vital Signs by Parameter",
+    "Safety Population \u2014 On-Treatment Records"
+  ) |>
+  fr_cols(
+    PARAMCD = fr_col(visible = FALSE),
+    PARAM   = fr_col(visible = FALSE),
+    TRT01A  = fr_col("Treatment",    width = 2.2),
+    USUBJID = fr_col("Subject ID",   width = 1.3),
+    AVISIT  = fr_col("Visit",        width = 1.6),
+    AVAL_C  = fr_col("Value",        width = 0.9, align = "decimal"),
+    BASE_C  = fr_col("Baseline",     width = 0.9, align = "decimal"),
+    CHG_C   = fr_col("Change from\nBaseline", width = 1.0, align = "decimal")
+  ) |>
+  fr_header(bold = TRUE, align = "center") |>
+  fr_rows(page_by = "PARAMCD", sort_by = c("USUBJID", "AVISIT"), repeat_cols = "USUBJID") |>
+  fr_footnotes(
+    "On-treatment records: ONTRTFL = 'Y'. Derived records (DTYPE non-missing) are excluded.",
+    "Value, Baseline, and Change from Baseline are in original units (VSSTRESU).",
+    "Sorted by parameter, treatment arm, subject, and visit number.",
+    "Parameters: BMI (kg/m{fr_super(2)}), BSA (m{fr_super(2)}), DIABP/SYSBP (mmHg), HEIGHT (cm), MAP (mmHg), PULSE (beats/min), TEMP ({fr_super(\"\u00b0\")}C), WEIGHT (kg)."
+  )
+```
+
+
+## Rendered Listing
+
+Pages are separated by `PARAMCD` -- each vital sign parameter gets its own page block. Within each parameter, records are sorted by treatment arm, subject, and visit.
+
+```{r}
+#| label: vs-listing
+#| echo: false
+#| ref.label: pipeline
+```

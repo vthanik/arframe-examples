@@ -1,0 +1,89 @@
+---
+title: "Demographic Characteristics Listing"
+subtitle: "Listing of Demographic Characteristics by Subject"
+execute:
+  echo: true
+  eval: true
+---
+
+
+```{r}
+#| label: prereqs
+#| include: false
+library(arframe)
+fr_theme(hlines = "header", font_family = "Courier New")
+```
+
+## Setup
+
+See [Prerequisites](../install.qmd) for installation instructions.
+
+```{r}
+#| label: setup
+library(arframe)
+library(pharmaverseadam)
+library(dplyr, warn.conflicts = FALSE)
+
+blank_to_na <- function(df) {
+  df[] <- lapply(df, function(x) {
+    if (is.character(x)) x[x == ""] <- NA_character_
+    x
+  })
+  df
+}
+
+arm_levels <- c("Placebo", "Xanomeline Low Dose", "Xanomeline High Dose")
+
+demog_listing <- pharmaverseadam::adsl |>
+  blank_to_na() |>
+  filter(SAFFL == "Y", TRT01A %in% arm_levels) |>
+  mutate(TRT01A = factor(TRT01A, levels = arm_levels)) |>
+  arrange(TRT01A, USUBJID) |>
+  select(
+    TRT01A,
+    USUBJID,
+    AGE,
+    SEX,
+    RACE,
+    ETHNIC
+  )
+```
+
+
+## arframe Pipeline
+
+```{r}
+#| label: pipeline
+#| eval: false
+demog_listing |>
+  fr_table() |>
+  fr_titles(
+    "Listing 16.2.4.1",
+    "Listing of Demographic Characteristics by Subject",
+    "Safety Population"
+  ) |>
+  fr_cols(
+    TRT01A  = fr_col("Treatment",  width = 2.2),
+    USUBJID = fr_col("Subject ID", width = 1.5),
+    AGE     = fr_col("Age\n(years)", width = 0.8, align = "center"),
+    SEX     = fr_col("Sex",         width = 0.7, align = "center"),
+    RACE    = fr_col("Race",        width = 2.2),
+    ETHNIC  = fr_col("Ethnicity",   width = 1.8)
+  ) |>
+  fr_header(bold = TRUE, align = "center") |>
+  fr_rows(page_by = "TRT01A", sort_by = "USUBJID", repeat_cols = "USUBJID") |>
+  fr_footnotes(
+    "Safety Population: all randomised subjects who received at least one dose of study medication.",
+    "Sorted by treatment arm and subject identifier.",
+    "SEX: M = Male, F = Female."
+  )
+```
+
+
+## Rendered Listing
+
+```{r}
+#| label: demog-listing
+#| echo: false
+#| ref.label: pipeline
+```

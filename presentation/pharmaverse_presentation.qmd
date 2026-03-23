@@ -1,0 +1,168 @@
+---
+title: "Streamlining the TFL Pipeline"
+subtitle: "Solving high-friction rendering challenges with arframe"
+author: ""
+format: 
+  revealjs:
+    theme: [clean, custom.scss]
+    slide-number: true
+    preview-links: auto
+    view-distance: 10
+    transition: fade
+    code-copy: true
+execute:
+  echo: true
+  eval: false
+---
+
+## 1. The Parallel QC Bottleneck {auto-animate=true}
+
+The current stack obscures the final data structure, making `proc compare` difficult.
+
+:::: {.columns}
+
+::: {.column width="50%"}
+### Current Stack (`tfrmt`)
+Data is hidden inside nested, heavily customized ARD objects before GT rendering.
+
+```r
+# Heavy manual prep required
+ard_tbl <- demog_ard |>
+  mutate(
+    TRT01A = unlist(...),
+    label = unlist(...),
+    stat = as.double(stat)
+  ) |> ... # 150+ lines
+```
+:::
+
+::: {.column width="50%"}
+### `arframe`
+Natively exports a clean, standard wide dataframe ready for validation.
+
+```r
+# direct conversion to wide
+demog_wide <- fr_wide_ard(
+  demog_ard,
+  statistic = "{n} ({p}%)"
+)
+
+# Output is a simple dataframe
+# Perfect for diffdf / proc compare
+```
+:::
+
+::::
+
+::: {.notes}
+**Speaker Notes:**
+- "Right now, `tfrmt` obscures the data structure. Parallel QC is a nightmare because you can't easily extract the wide format to compare against SAS."
+- "With `arframe`, `fr_wide_ard()` natively generates a standard wide dataframe. Validation is literally just running `proc compare` or `diffdf`. No workarounds or hacking required."
+:::
+
+---
+
+## 2. Standardization: Decimal Alignment {auto-animate=true}
+
+Inconsistent formatting hacks lead to hours of debugging.
+
+:::: {.columns}
+
+::: {.column width="50%"}
+### Current Stack
+4 programmers write 4 different hacks (regex, padding, custom functions) to achieve decimal alignment in GT.
+
+```r
+# Example GT workaround
+gt_table |> 
+  cols_align_decimal(
+    columns = everything()
+  ) 
+# Often fails on complex strings 
+# or "(N=xx)" entries
+```
+:::
+
+::: {.column width="50%"}
+### `arframe`
+One native, universally applied argument. 
+
+```r
+# Standardized across all tables
+demog_spec <- demog_wide |>
+  fr_cols(
+    `Placebo` = fr_col(align = "decimal"),
+    `Drug X`  = fr_col(align = "decimal")
+  )
+```
+:::
+
+::::
+
+::: {.notes}
+**Speaker Notes:**
+- "If I ask four programmers to do decimal alignment in `tfrmt`, I get four completely different, hacky solutions. When one of them breaks, it takes hours to debug."
+- "In `arframe`, decimal alignment is a native argument: `align = "decimal"`. Everyone does it the exact same way. It takes one second to read and zero seconds to debug."
+:::
+
+---
+
+## 3. The Wide Table Problem {auto-animate=true}
+
+Studies with 8+ treatment columns break standard rendering packages.
+
+:::: {.columns}
+
+::: {.column width="100%"}
+### Splitting columns across pages
+`gt` and `tfrmt` require heavy custom chunking logic to span a single wide table (e.g., Stub + 4 cols on Page 1, Stub + remaining cols on Page 2).
+
+### `arframe` implementation
+Handled completely natively.
+
+```r
+vs_spec <- vs_long |>
+  fr_table() |>
+  fr_cols(
+    statistic = fr_col("Statistic", stub = TRUE),
+    ... # 8 treatment arms
+    .split = TRUE # Automatically paginates and repeats the stub
+  )
+```
+:::
+
+::::
+
+::: {.notes}
+**Speaker Notes:**
+- "If you have a study with 8 treatment columns, `gt` and `tfrmt` simply break. They can't split columns across pages neatly."
+- "You end up having to rewrite your own custom functions just to get it to print or split it into separate table views manually."
+- "`arframe` handles this natively with `.split = TRUE`. It automatically paginates and carries your stub column over to the next page."
+:::
+
+---
+
+## 4. Live Demo: Point-and-Click Generation {auto-animate=true}
+
+Lowering the barrier to entry with **arbuilder**.
+
+:::: {.columns}
+::: {.column width="60%"}
+![](https://i.imgur.com/your_screenshot_placeholder.png){width="100%" fig-align="center"}
+:::
+
+::: {.column width="40%"}
+<br><br>
+- **No coding required:** Point-and-click UI
+- **Standardized:** Select pre-built templates
+- **Reproducible:** Automatically exports the exact backend R script.
+:::
+::::
+
+::: {.notes}
+**Speaker Notes:**
+- "I know transitioning to new code can be daunting. So I built a UI layer on top called `arbuilder`. It’s a template generator."
+- *[Stop talking here and open the Shiny app local instance]*
+- *[Load data, click Demographics template, click export]*
+- "Right now `arbuilder` works for demographics as a proof-of-concept. In the future, we can easily extend this to produce any figure, listing, or table format."
+:::

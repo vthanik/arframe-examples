@@ -1,0 +1,268 @@
+---
+title: "Laboratory Worst Toxicity Grade"
+subtitle: "Worst Post-Baseline Toxicity Grade by Parameter"
+execute:
+  echo: true
+  eval: true
+---
+
+
+```{r}
+#| label: prereqs
+#| include: false
+library(arframe)
+fr_theme(hlines = "header", font_family = "Courier New")
+```
+
+## Setup
+
+See [Prerequisites](../install.qmd) for installation instructions.
+
+```{r}
+#| label: setup
+library(arframe)
+library(pharmaverseadam)
+library(dplyr, warn.conflicts = FALSE)
+library(tidyr)
+
+blank_to_na <- function(df) {
+  df[] <- lapply(df, function(x) {
+    if (is.character(x)) x[x == ""] <- NA_character_
+    x
+  })
+  df
+}
+
+# Chemistry panel — 6 key parameters
+param_subset <- c("ALT", "AST", "BILI", "CREAT", "GLUC", "SODIUM")
+
+adlb_saf <- pharmaverseadam::adlb |>
+  blank_to_na() |>
+  filter(
+    SAFFL   == "Y",
+    TRT01A  != "Screen Failure",
+    PARCAT1 == "CHEMISTRY",
+    PARAMCD %in% param_subset
+  )
+
+adsl_saf <- pharmaverseadam::adsl |>
+  blank_to_na() |>
+  filter(SAFFL == "Y", TRT01A != "Screen Failure")
+
+arm_levels <- c("Placebo", "Xanomeline Low Dose", "Xanomeline High Dose")
+arm_n      <- adsl_saf |> count(TRT01A) |> pull(n, name = TRT01A)
+arm_n      <- arm_n[arm_levels]
+```
+
+
+## Data Preparation
+
+::: {.panel-tabset}
+
+### dplyr
+
+```{r}
+#| label: dplyr-code
+
+# ── Worst post-baseline toxicity grade per subject per PARAMCD ──
+# ATOXGR uses signed values: positive = high direction, negative = low direction
+# Worst = maximum absolute toxicity grade
+worst_tox <- adlb_saf |>
+  filter(is.na(ABLFL) | ABLFL != "Y", !is.na(ATOXGR)) |>
+  mutate(abs_tox = abs(as.integer(ATOXGR))) |>
+  group_by(USUBJID, PARAMCD, PARAM, TRT01A) |>
+  slice_max(abs_tox, n = 1, with_ties = FALSE) |>
+  ungroup() |>
+  mutate(worst_grade = abs_tox)
+
+# Subjects with no post-baseline data get Grade 0 (no abnormality)
+all_subj_param <- adlb_saf |>
+  filter(ABLFL == "Y") |>
+  distinct(USUBJID, PARAMCD, PARAM, TRT01A)
+
+# Fill Grade 0 for subjects with baseline but no post-baseline tox record
+worst_tox_full <- all_subj_param |>
+  left_join(
+    worst_tox |> select(USUBJID, PARAMCD, worst_grade),
+    by = c("USUBJID", "PARAMCD")
+  ) |>
+  mutate(worst_grade = replace_na(worst_grade, 0L))
+
+# ── Grade labels (display grades 0–3) ──
+grade_levels <- c("0", "1", "2", "3", "Any Grade >= 1")
+
+n_pct <- function(n, denom) {
+  ifelse(denom == 0, "0 (0.0)", sprintf("%d (%.1f)", n, n / denom * 100))
+}
+
+# ── Count subjects per worst grade per arm per param ──
+grade_counts <- worst_tox_full |>
+  filter(TRT01A %in% arm_levels, worst_grade %in% 0:3) |>
+  count(PARAMCD, PARAM, TRT01A, worst_grade) |>
+  mutate(grade_label = paste0("Grade ", worst_grade))
+
+# Denominators: all subjects with a baseline record for each param×arm
+denom_df <- worst_tox_full |>
+  filter(TRT01A %in% arm_levels) |>
+  count(PARAMCD, TRT01A, name = "denom")
+
+grade_pct <- grade_counts |>
+  left_join(denom_df, by = c("PARAMCD", "TRT01A")) |>
+  mutate(value = n_pct(n, denom)) |>
+  select(PARAMCD, PARAM, grade_label, TRT01A, value) |>
+  pivot_wider(names_from = TRT01A, values_from = value)
+
+# ── Any Grade >= 1 derived row ──
+any_grade <- worst_tox_full |>
+  filter(TRT01A %in% arm_levels, worst_grade >= 1) |>
+  count(PARAMCD, PARAM, TRT01A) |>
+  left_join(denom_df, by = c("PARAMCD", "TRT01A")) |>
+  mutate(
+    value       = n_pct(n, denom),
+    grade_label = "Any Grade >= 1"
+  ) |>
+  select(PARAMCD, PARAM, grade_label, TRT01A, value) |>
+  pivot_wider(names_from = TRT01A, values_from = value)
+
+# ── Combine grades 0–3 + Any Grade >= 1, sorted by PARAM then grade ──
+tox_wide <- bind_rows(grade_pct, any_grade) |>
+  mutate(
+    PARAMCD = factor(PARAMCD, levels = param_subset),
+    grade_order = case_when(
+      grade_label == "Grade 0"       ~ 0,
+      grade_label == "Grade 1"       ~ 1,
+      grade_label == "Grade 2"       ~ 2,
+      grade_label == "Grade 3"       ~ 3,
+      grade_label == "Any Grade >= 1" ~ 4
+    )
+  ) |>
+  arrange(PARAMCD, grade_order) |>
+  mutate(
+    PARAMCD     = as.character(PARAMCD),
+    is_summary  = if_else(grade_label == "Any Grade >= 1", "summary", "grade")
+  ) |>
+  mutate(across(all_of(arm_levels), ~ replace_na(.x, "0 (0.0)"))) |>
+  select(PARAMCD, PARAM, grade_label, is_summary, all_of(arm_levels))
+```
+
+### cards
+
+The worst toxicity grade analysis requires a per-subject maximum derivation before tabulation. This pre-processing step is most naturally expressed in dplyr. The cards path below reuses the derived `worst_tox_full` dataset from the dplyr tab:
+
+```{r}
+#| label: cards-code
+
+# Reuse worst_tox_full derived above (worst post-baseline grade per subject)
+# Tabulate using ard_categorical on the worst_grade variable
+
+tox_ard_data <- worst_tox_full |>
+  filter(TRT01A %in% arm_levels) |>
+  mutate(
+    worst_grade_cat = factor(
+      paste0("Grade ", worst_grade),
+      levels = c("Grade 0", "Grade 1", "Grade 2", "Grade 3")
+    )
+  )
+
+# Grade 0-3 counts via dplyr (same derivation, cards-style naming)
+tox_cards_grades <- tox_ard_data |>
+  count(PARAMCD, PARAM, TRT01A, worst_grade_cat) |>
+  left_join(
+    tox_ard_data |> count(PARAMCD, TRT01A, name = "denom"),
+    by = c("PARAMCD", "TRT01A")
+  ) |>
+  mutate(
+    value      = ifelse(denom == 0, "0 (0.0)", sprintf("%d (%.1f)", n, n / denom * 100)),
+    grade_label = as.character(worst_grade_cat)
+  ) |>
+  select(PARAMCD, PARAM, grade_label, TRT01A, value) |>
+  pivot_wider(names_from = TRT01A, values_from = value)
+
+tox_cards_any <- tox_ard_data |>
+  filter(worst_grade >= 1) |>
+  count(PARAMCD, PARAM, TRT01A) |>
+  left_join(
+    tox_ard_data |> count(PARAMCD, TRT01A, name = "denom"),
+    by = c("PARAMCD", "TRT01A")
+  ) |>
+  mutate(
+    value      = ifelse(denom == 0, "0 (0.0)", sprintf("%d (%.1f)", n, n / denom * 100)),
+    grade_label = "Any Grade >= 1"
+  ) |>
+  select(PARAMCD, PARAM, grade_label, TRT01A, value) |>
+  pivot_wider(names_from = TRT01A, values_from = value)
+
+tox_cards <- bind_rows(tox_cards_grades, tox_cards_any) |>
+  mutate(
+    PARAMCD = factor(PARAMCD, levels = param_subset),
+    grade_order = case_when(
+      grade_label == "Grade 0"        ~ 0,
+      grade_label == "Grade 1"        ~ 1,
+      grade_label == "Grade 2"        ~ 2,
+      grade_label == "Grade 3"        ~ 3,
+      grade_label == "Any Grade >= 1" ~ 4
+    )
+  ) |>
+  arrange(PARAMCD, grade_order) |>
+  mutate(
+    PARAMCD    = as.character(PARAMCD),
+    is_summary = if_else(grade_label == "Any Grade >= 1", "summary", "grade")
+  ) |>
+  mutate(across(all_of(arm_levels), ~ replace_na(.x, "0 (0.0)"))) |>
+  select(PARAMCD, PARAM, grade_label, is_summary, all_of(arm_levels))
+```
+
+:::
+
+
+## arframe Pipeline
+
+Each row is a toxicity grade category. Columns are treatment arms. The "Any Grade >= 1" summary row is bolded. One page per parameter:
+
+```{r}
+#| label: pipeline
+#| eval: false
+tox_wide |>
+  fr_table() |>
+  fr_titles(
+    "Table 14.3.7",
+    "Laboratory Worst Post-Baseline Toxicity Grade by Parameter",
+    "Safety Population"
+  ) |>
+  fr_cols(
+    PARAMCD     = fr_col(visible = FALSE),
+    PARAM       = fr_col(visible = FALSE),
+    grade_label = fr_col("Toxicity Grade", width = 1.8),
+    is_summary  = fr_col(visible = FALSE),
+    !!!setNames(
+      lapply(arm_levels, function(a) fr_col(a, align = "decimal")),
+      arm_levels
+    ),
+    .n = arm_n
+  ) |>
+  fr_header(bold = TRUE, align = "center") |>
+  fr_rows(page_by = "PARAM") |>
+  fr_styles(
+    fr_row_style(
+      rows = fr_rows_matches("is_summary", value = "summary"),
+      bold = TRUE
+    )
+  ) |>
+  fr_page() |>
+  fr_footnotes(
+    "Worst post-baseline toxicity grade is the maximum absolute toxicity grade (|ATOXGR|) recorded after baseline.",
+    "Grade 0 = no abnormality or within normal limits; Grades 1-3 = increasing severity.",
+    "Any Grade >= 1: subjects with at least one post-baseline toxicity grade of 1 or higher.",
+    "Denominator for percentages is the number of subjects with a baseline value for each parameter.",
+    "Safety Population: all randomised subjects who received at least one dose."
+  )
+```
+
+
+## Rendered Table
+
+```{r}
+#| label: rendered-table
+#| echo: false
+#| ref.label: pipeline
+```

@@ -1,0 +1,137 @@
+---
+title: "Analysis Populations"
+subtitle: "Summary of Analysis Populations"
+execute:
+  echo: true
+  eval: true
+---
+
+
+```{r}
+#| label: prereqs
+#| include: false
+library(arframe)
+fr_theme(hlines = "header", font_family = "Courier New")
+```
+
+## Setup
+
+See [Prerequisites](../install.qmd) for installation instructions.
+
+```{r}
+#| label: setup
+library(arframe)
+library(pharmaverseadam)
+library(dplyr, warn.conflicts = FALSE)
+library(tidyr)
+
+blank_to_na <- function(df) {
+  df[] <- lapply(df, function(x) {
+    if (is.character(x)) x[x == ""] <- NA_character_
+    x
+  })
+  df
+}
+
+adsl <- pharmaverseadam::adsl |>
+  blank_to_na() |>
+  filter(TRT01A != "Screen Failure")
+
+arm_levels <- c("Placebo", "Xanomeline Low Dose", "Xanomeline High Dose")
+
+adsl_arms <- adsl |> filter(TRT01A %in% arm_levels)
+
+arm_n <- adsl_arms |>
+  count(TRT01A) |>
+  pull(n, name = TRT01A)
+arm_n <- arm_n[arm_levels]
+
+N_total <- sum(arm_n)
+n_vec <- c(arm_n, Total = N_total)
+```
+
+
+## Data Preparation
+
+```{r}
+#| label: data-prep
+
+n_pct <- function(n, denom) sprintf("%d (%.1f)", n, n / denom * 100)
+
+# ── Define population flags ──
+# Enrolled = all randomized (non-screen-failure) subjects
+# Safety = SAFFL == "Y"
+# ITT/Full Analysis Set = all randomized subjects (same as enrolled in this study)
+pop_list <- list(
+  "Enrolled"                = rep(TRUE, nrow(adsl_arms)),
+  "Safety Population"       = adsl_arms$SAFFL == "Y",
+  "ITT / Full Analysis Set" = rep(TRUE, nrow(adsl_arms))
+)
+
+# ── Build summary by arm ──
+pop_rows <- lapply(names(pop_list), function(pop_name) {
+  mask <- pop_list[[pop_name]]
+  sub <- adsl_arms[mask, ]
+
+  by_arm <- sub |>
+    count(TRT01A) |>
+    filter(TRT01A %in% arm_levels) |>
+    mutate(value = mapply(n_pct, n, arm_n[TRT01A])) |>
+    select(TRT01A, value) |>
+    pivot_wider(names_from = TRT01A, values_from = value)
+
+  total_n <- nrow(sub)
+  total_val <- n_pct(total_n, N_total)
+
+  bind_cols(
+    tibble(population = pop_name),
+    by_arm,
+    tibble(Total = total_val)
+  )
+})
+
+pop_wide <- bind_rows(pop_rows) |>
+  mutate(across(all_of(c(arm_levels, "Total")), ~ replace_na(.x, "0 (0.0)")))
+```
+
+
+## arframe Pipeline
+
+The `fr_table()` pipeline:
+
+```{r}
+#| label: pipeline
+#| eval: false
+pop_wide |>
+  fr_table() |>
+  fr_titles(
+    "Table 14.1.3",
+    "Summary of Analysis Populations",
+    "Randomized Subjects"
+  ) |>
+  fr_cols(
+    population = fr_col("Population", width = 2.5),
+    !!!setNames(
+      lapply(arm_levels, function(a) fr_col(a, align = "decimal")),
+      arm_levels
+    ),
+    Total = fr_col("Total", align = "decimal"),
+    .n = n_vec
+  ) |>
+  fr_header(bold = TRUE, align = "center") |>
+  fr_footnotes(
+    "n (%) where percentages are based on N randomized per treatment arm.",
+    "Enrolled = all randomized subjects excluding screen failures.",
+    "Safety Population = subjects who received at least one dose of study drug (SAFFL = 'Y').",
+    "ITT / Full Analysis Set = all randomized subjects."
+  )
+```
+
+
+## Rendered Table
+
+```{r}
+#| label: table
+#| echo: false
+#| ref.label: pipeline
+```
