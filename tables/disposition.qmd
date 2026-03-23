@@ -178,7 +178,7 @@ disp_cards <- fr_wide_ard(
 
 ## arframe Pipeline
 
-The `fr_table()` pipeline for the dplyr path:
+The rendered table below uses the **dplyr** data prep (`disp_wide`). The cards tab produces an equivalent `disp_cards` — swap it in to use the cards path instead.
 
 ```{r}
 #| label: pipeline

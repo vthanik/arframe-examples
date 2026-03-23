@@ -89,6 +89,7 @@ format:
   html:
     theme:
       light: [cosmo, styles.scss]
+    html-table-processing: none
     toc: true
     toc-depth: 3
     toc-title: "On this page"

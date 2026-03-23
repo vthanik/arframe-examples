@@ -154,7 +154,7 @@ ae_ard <- ard_stack(
   .overall = TRUE
 )
 
-ae_wide <- fr_wide_ard(
+ae_wide_cards <- fr_wide_ard(
   ae_ard,
   statistic = list(dichotomous = "{n} ({p}%)"),
   decimals  = c(p = 1),
@@ -174,7 +174,7 @@ ae_wide <- fr_wide_ard(
 
 ## arframe Pipeline
 
-The `fr_table()` pipeline for the dplyr path:
+The rendered table below uses the **dplyr** data prep (`ae_wide`). The cards tab produces an equivalent `ae_wide_cards` — swap it in to use the cards path instead.
 
 ```{r}
 #| label: pipeline

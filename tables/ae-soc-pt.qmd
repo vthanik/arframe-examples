@@ -160,7 +160,8 @@ pt_order <- pt_wide |>
       count(AEBODSYS, AEDECOD, name = "pt_n"),
     by = c("soc" = "AEBODSYS", "pt" = "AEDECOD")
   ) |>
-  arrange(match(soc, soc_order), desc(pt_n))
+  arrange(match(soc, soc_order), desc(pt_n)) |>
+  select(-pt_n)
 
 # ── Interleave SOC header row + PT rows, sorted ──
 ae_wide <- bind_rows(
@@ -196,7 +197,7 @@ ae_ard <- ard_stack_hierarchical(
 ) |>
   sort_ard_hierarchical(sort = "descending")
 
-ae_wide <- fr_wide_ard(
+ae_wide_cards <- fr_wide_ard(
   ae_ard,
   statistic = "{n} ({p}%)",
   decimals  = c(p = 1),
@@ -213,7 +214,7 @@ ae_wide <- fr_wide_ard(
 
 ## arframe Pipeline
 
-The `fr_table()` pipeline for the dplyr path:
+The rendered table below uses the **dplyr** data prep (`ae_wide`). The cards tab produces an equivalent `ae_wide_cards` — swap it in to use the cards path instead.
 
 ```{r}
 #| label: pipeline

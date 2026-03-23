@@ -154,6 +154,8 @@ vs_cards <- vs_ard |>
 
 ## arframe Pipeline
 
+The rendered table below uses the **dplyr** data prep (`vs_wide`). The cards tab produces an equivalent `vs_cards` — swap it in to use the cards path instead.
+
 Each row is a treatment group at a visit, with Value and Change from Baseline statistics as columns:
 
 ```{r}

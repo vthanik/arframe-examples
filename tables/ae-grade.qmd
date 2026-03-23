@@ -186,7 +186,7 @@ ae_grade_cards <- fr_wide_ard(
 
 ## arframe Pipeline
 
-The `fr_table()` pipeline for the dplyr path (arm x severity columns with spans):
+The rendered table below uses the **dplyr** data prep (`ae_grade_wide`, arm x severity columns with spans). The cards tab produces `ae_grade_cards` with a different layout — see the cards tab for details.
 
 ```{r}
 #| label: pipeline

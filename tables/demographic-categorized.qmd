@@ -123,7 +123,7 @@ demog_ard <- ard_stack(
   .overall = TRUE
 )
 
-demog_wide <- fr_wide_ard(
+demog_cards <- fr_wide_ard(
   demog_ard,
   statistic = list(
     continuous = c(
@@ -151,7 +151,7 @@ demog_wide <- fr_wide_ard(
 
 ## arframe Pipeline
 
-The `fr_table()` pipeline is the same regardless of how the data was prepared:
+The rendered table below uses the **dplyr** data prep (`demog_wide`). The cards tab produces an equivalent `demog_cards` — swap it in to use the cards path instead.
 
 ```{r}
 #| label: pipeline

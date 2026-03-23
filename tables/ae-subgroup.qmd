@@ -62,10 +62,6 @@ arm_agegr_n <- adsl_saf |>
 
 ## Data Preparation
 
-::: {.panel-tabset}
-
-### dplyr
-
 ```{r}
 #| label: dplyr-code
 
@@ -119,12 +115,8 @@ ae_subgr_wide <- lapply(ae_categories, function(cat) {
 n_vec <- arm_agegr_n
 ```
 
-:::
-
 
 ## arframe Pipeline
-
-The `fr_table()` pipeline for the dplyr path:
 
 ```{r}
 #| label: pipeline

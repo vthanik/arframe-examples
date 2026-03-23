@@ -217,6 +217,8 @@ tox_cards <- bind_rows(tox_cards_grades, tox_cards_any) |>
 
 ## arframe Pipeline
 
+The rendered table below uses the **dplyr** data prep (`tox_wide`). The cards tab produces an equivalent `tox_cards` — swap it in to use the cards path instead.
+
 Each row is a toxicity grade category. Columns are treatment arms. The "Any Grade >= 1" summary row is bolded. One page per parameter:
 
 ```{r}

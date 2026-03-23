@@ -52,10 +52,6 @@ arm_levels <- c("Placebo", "Xanomeline Low Dose", "Xanomeline High Dose")
 
 ## Data Preparation
 
-::: {.panel-tabset}
-
-### dplyr
-
 ```{r}
 #| label: dplyr-code
 
@@ -153,12 +149,8 @@ ae_ea_wide <- bind_rows(
   ))
 ```
 
-:::
-
 
 ## arframe Pipeline
-
-The `fr_table()` pipeline for the dplyr path:
 
 ```{r}
 #| label: pipeline

@@ -236,7 +236,7 @@ ae_events_cards <- fr_wide_ard(
 
 ## arframe Pipeline
 
-The `fr_table()` pipeline for the dplyr path (with subject + event counts):
+The rendered table below uses the **dplyr** data prep (`ae_events_wide`, with subject + event counts). The cards tab produces `ae_events_cards` (subject counts only) — swap it in to use the cards path instead.
 
 ```{r}
 #| label: pipeline

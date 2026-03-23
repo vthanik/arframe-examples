@@ -191,6 +191,8 @@ bor_cards <- bind_rows(bor_cat_wide, blank_row_cards, orr_cards, dcr_cards) |>
 
 ## arframe Pipeline
 
+The rendered table below uses the **dplyr** data prep (`bor_wide`). The cards tab produces an equivalent `bor_cards` — swap it in to use the cards path instead.
+
 ```{r}
 #| label: pipeline
 #| eval: false
