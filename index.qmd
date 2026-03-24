@@ -46,6 +46,19 @@ Submission-ready clinical trial tables and listings. Every example runs — pick
 ::: {.tlg-card}
 [TABLE · STUDY POPULATION]{.card-type}
 
+### [Prior Medication](tables/prior-medication.qmd)
+
+[Prior medications by medication class and preferred name. Hierarchical layout.]{.card-desc}
+
+::: {.card-tags}
+[hierarchy]{.tag .tag-hierarchy}
+[cards]{.tag .tag-cards}
+:::
+:::
+
+::: {.tlg-card}
+[TABLE · STUDY POPULATION]{.card-type}
+
 ### [Subject Disposition](tables/disposition.qmd)
 
 [Screening, randomization, treatment completion, and reasons for discontinuation.]{.card-desc}

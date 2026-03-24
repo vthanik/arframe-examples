@@ -60,8 +60,11 @@ arm_n <- arm_n[arm_levels]
 N_total <- nrow(adsl_saf)
 n_vec   <- c(arm_n, Total = N_total)
 
-# Category ordered levels
+# Category ordered levels (factor ensures 0-count levels appear)
 avalcat_levels <- c("<= 450 ms", ">450<=480 ms", ">480<=500 ms", ">500 ms")
+
+adeg_qtcf <- adeg_qtcf |>
+  mutate(AVALCAT1 = factor(AVALCAT1, levels = avalcat_levels))
 chgcat_levels  <- c("<= 30 ms", ">30<=60 ms", ">60 ms")
 ```
 

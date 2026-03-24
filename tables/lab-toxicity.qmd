@@ -86,7 +86,10 @@ worst_tox_full <- all_subj_param |>
     worst_tox |> select(USUBJID, PARAMCD, worst_grade),
     by = c("USUBJID", "PARAMCD")
   ) |>
-  mutate(worst_grade = replace_na(worst_grade, 0L))
+  mutate(
+    worst_grade = replace_na(worst_grade, 0L),
+    worst_grade = factor(worst_grade, levels = 0:3)
+  )
 
 # ── Grade labels (display grades 0–3) ──
 grade_levels <- c("0", "1", "2", "3", "Any Grade >= 1")
@@ -97,8 +100,9 @@ n_pct <- function(n, denom) {
 
 # ── Count subjects per worst grade per arm per param ──
 grade_counts <- worst_tox_full |>
-  filter(TRT01A %in% arm_levels, worst_grade %in% 0:3) |>
-  count(PARAMCD, PARAM, TRT01A, worst_grade) |>
+  filter(TRT01A %in% arm_levels) |>
+  count(PARAMCD, PARAM, TRT01A, worst_grade, .drop = FALSE) |>
+  filter(!is.na(PARAMCD), !is.na(TRT01A)) |>
   mutate(grade_label = paste0("Grade ", worst_grade))
 
 # Denominators: all subjects with a baseline record for each param×arm

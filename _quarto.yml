@@ -39,6 +39,7 @@ website:
           - text: "Study Population"
           - tables/demographic.qmd
           - tables/medical-history.qmd
+          - tables/prior-medication.qmd
           - tables/disposition.qmd
           - tables/disposition-screening.qmd
           - tables/disposition-eos.qmd

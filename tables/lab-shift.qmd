@@ -53,9 +53,15 @@ arm_levels <- c("Placebo", "Xanomeline Low Dose", "Xanomeline High Dose")
 arm_n      <- adsl_saf |> count(TRT01A) |> pull(n, name = TRT01A)
 arm_n      <- arm_n[arm_levels]
 
-# Reference categories in display order
+# Reference categories as factors (ensures 0-count levels appear)
 bnrind_levels <- c("LOW", "NORMAL", "HIGH")
 anrind_levels <- c("Low", "Normal", "High")
+
+adlb_saf <- adlb_saf |>
+  mutate(
+    BNRIND = factor(BNRIND, levels = bnrind_levels),
+    ANRIND = factor(ANRIND, levels = c("LOW", "NORMAL", "HIGH"))
+  )
 ```
 
 
