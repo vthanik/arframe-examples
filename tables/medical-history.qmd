@@ -1,0 +1,227 @@
+---
+title: "Medical History"
+subtitle: "Summary of Medical History by System Organ Class and Preferred Term"
+execute:
+  echo: true
+  eval: true
+---
+
+
+```{r}
+#| label: prereqs
+#| include: false
+library(arframe)
+fr_theme(hlines = "header", font_family = "Courier New")
+
+blank_to_na <- function(df) {
+  df[] <- lapply(df, function(x) {
+    if (is.character(x)) x[x == ""] <- NA_character_
+    x
+  })
+  df
+}
+```
+
+## Setup
+
+See [Prerequisites](../install.qmd) for installation instructions.
+
+```{r}
+#| label: setup
+library(arframe)
+library(pharmaverseadam)
+library(dplyr, warn.conflicts = FALSE)
+library(tidyr)
+library(cards)
+
+adsl_saf <- pharmaverseadam::adsl |>
+  blank_to_na() |>
+  filter(SAFFL == "Y", TRT01A != "Screen Failure")
+
+admh <- pharmaverseadam::admh |>
+  blank_to_na() |>
+  filter(SAFFL == "Y")
+
+arm_levels <- c("Placebo", "Xanomeline Low Dose", "Xanomeline High Dose")
+arm_n <- adsl_saf |>
+  filter(TRT01A %in% arm_levels) |>
+  count(TRT01A) |>
+  pull(n, name = TRT01A)
+arm_n <- arm_n[arm_levels]
+N_total <- nrow(adsl_saf)
+n_vec <- c(arm_n, Total = N_total)
+```
+
+
+## Data Preparation
+
+::: {.panel-tabset}
+
+### dplyr
+
+```{r}
+#| label: dplyr-code
+
+n_pct <- function(n, denom) sprintf("%d (%.1f)", n, n / denom * 100)
+
+# ── Overall: subjects with at least one MH condition ──
+any_mh_arm <- admh |>
+  distinct(USUBJID, TRT01A) |>
+  count(TRT01A) |>
+  filter(TRT01A %in% arm_levels) |>
+  mutate(value = mapply(n_pct, n, arm_n[TRT01A])) |>
+  select(TRT01A, value) |>
+  pivot_wider(names_from = TRT01A, values_from = value)
+
+any_mh_total <- n_distinct(admh$USUBJID)
+
+any_mh_row <- bind_cols(
+  tibble(soc = "ANY MEDICAL HISTORY", pt = "ANY MEDICAL HISTORY",
+         row_type = "overall"),
+  any_mh_arm,
+  tibble(Total = n_pct(any_mh_total, N_total))
+)
+
+# ── SOC-level (MHBODSYS) ──
+soc_arm <- admh |>
+  distinct(USUBJID, TRT01A, MHBODSYS) |>
+  count(TRT01A, MHBODSYS) |>
+  filter(TRT01A %in% arm_levels) |>
+  mutate(value = mapply(n_pct, n, arm_n[TRT01A])) |>
+  select(TRT01A, MHBODSYS, value) |>
+  pivot_wider(names_from = TRT01A, values_from = value)
+
+soc_total <- admh |>
+  distinct(USUBJID, MHBODSYS) |>
+  count(MHBODSYS) |>
+  mutate(Total = n_pct(n, N_total)) |>
+  select(MHBODSYS, Total)
+
+soc_wide <- left_join(soc_arm, soc_total, by = "MHBODSYS") |>
+  mutate(soc = MHBODSYS, pt = MHBODSYS, row_type = "soc", .before = 1) |>
+  select(-MHBODSYS)
+
+# ── PT-level (MHDECOD) ──
+pt_arm <- admh |>
+  distinct(USUBJID, TRT01A, MHBODSYS, MHDECOD) |>
+  count(TRT01A, MHBODSYS, MHDECOD) |>
+  filter(TRT01A %in% arm_levels) |>
+  mutate(value = mapply(n_pct, n, arm_n[TRT01A])) |>
+  select(TRT01A, MHBODSYS, MHDECOD, value) |>
+  pivot_wider(names_from = TRT01A, values_from = value)
+
+pt_total <- admh |>
+  distinct(USUBJID, MHBODSYS, MHDECOD) |>
+  count(MHBODSYS, MHDECOD) |>
+  mutate(Total = n_pct(n, N_total)) |>
+  select(MHBODSYS, MHDECOD, Total)
+
+pt_wide <- left_join(pt_arm, pt_total, by = c("MHBODSYS", "MHDECOD")) |>
+  mutate(soc = MHBODSYS, pt = MHDECOD, row_type = "pt", .before = 1) |>
+  select(-MHBODSYS, -MHDECOD)
+
+# ── Sort by frequency and interleave ──
+soc_order <- admh |>
+  distinct(USUBJID, MHBODSYS) |>
+  count(MHBODSYS, name = "soc_n") |>
+  arrange(desc(soc_n)) |>
+  pull(MHBODSYS)
+
+mh_wide <- bind_rows(
+  any_mh_row,
+  bind_rows(lapply(soc_order, function(s) {
+    bind_rows(
+      filter(soc_wide, soc == s),
+      filter(pt_wide, soc == s) |>
+        left_join(
+          admh |> distinct(USUBJID, MHBODSYS, MHDECOD) |>
+            count(MHBODSYS, MHDECOD, name = "pt_n"),
+          by = c("soc" = "MHBODSYS", "pt" = "MHDECOD")
+        ) |> arrange(desc(pt_n)) |> select(-pt_n)
+    )
+  }))
+) |>
+  mutate(across(where(is.character) & !c(soc, pt, row_type),
+                ~ replace_na(.x, "0 (0.0)")))
+```
+
+### cards
+
+```{r}
+#| label: cards-code
+mh_ard <- ard_stack_hierarchical(
+  data        = admh,
+  variables   = c(MHBODSYS, MHDECOD),
+  by          = TRT01A,
+  denominator = adsl_saf,
+  id          = USUBJID,
+  overall     = TRUE,
+  over_variables = TRUE
+) |>
+  sort_ard_hierarchical(sort = "descending")
+
+mh_wide_cards <- fr_wide_ard(
+  mh_ard,
+  statistic = "{n} ({p}%)",
+  decimals  = c(p = 1),
+  label     = c(
+    "..ard_hierarchical_overall.." = "ANY MEDICAL HISTORY",
+    MHBODSYS = "System Organ Class",
+    MHDECOD  = "Preferred Term"
+  )
+)
+```
+
+:::
+
+
+## arframe Pipeline
+
+The rendered table below uses the **dplyr** data prep (`mh_wide`). The cards tab produces an equivalent `mh_wide_cards` — swap it in to use the cards path instead.
+
+```{r}
+#| label: pipeline
+#| eval: false
+mh_wide |>
+  fr_table() |>
+  fr_titles(
+    "Table 14.1.7",
+    "Summary of Medical History",
+    "by System Organ Class and Preferred Term",
+    "Safety Population"
+  ) |>
+  fr_cols(
+    soc      = fr_col(visible = FALSE),
+    pt       = fr_col("System Organ Class\n  Preferred Term", width = 3.5),
+    row_type = fr_col(visible = FALSE),
+    !!!setNames(
+      lapply(arm_levels, function(a) fr_col(a, align = "decimal")),
+      arm_levels
+    ),
+    Total = fr_col("Total", align = "decimal"),
+    .n = n_vec
+  ) |>
+  fr_header(bold = TRUE, align = "center") |>
+  fr_rows(
+    group_by  = "soc",
+    indent_by = "pt"
+  ) |>
+  fr_styles(
+    fr_row_style(rows = fr_rows_matches("row_type", value = "soc"), bold = TRUE),
+    fr_row_style(rows = fr_rows_matches("row_type", value = "overall"), bold = TRUE)
+  ) |>
+  fr_footnotes(
+    "Subjects counted once per SOC and once per PT.",
+    "Percentages based on N per treatment arm (Safety Population).",
+    "SOC sorted by descending frequency; PT sorted within SOC by descending frequency."
+  )
+```
+
+
+## Rendered Table
+
+```{r}
+#| label: table
+#| echo: false
+#| ref.label: pipeline
+```

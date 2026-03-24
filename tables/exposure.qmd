@@ -225,6 +225,8 @@ exposure_wide |>
   )
 ```
 
+## Rendered Table
+
 ```{r}
 #| label: table
 #| echo: false

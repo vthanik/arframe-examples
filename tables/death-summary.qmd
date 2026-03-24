@@ -12,6 +12,14 @@ execute:
 #| include: false
 library(arframe)
 fr_theme(hlines = "header", font_family = "Courier New")
+
+blank_to_na <- function(df) {
+  df[] <- lapply(df, function(x) {
+    if (is.character(x)) x[x == ""] <- NA_character_
+    x
+  })
+  df
+}
 ```
 
 ## Setup
@@ -24,18 +32,15 @@ library(arframe)
 library(pharmaverseadam)
 library(dplyr, warn.conflicts = FALSE)
 library(tidyr)
-
-blank_to_na <- function(df) {
-  df[] <- lapply(df, function(x) {
-    if (is.character(x)) x[x == ""] <- NA_character_
-    x
-  })
-  df
-}
+library(cards)
 
 adsl_saf <- pharmaverseadam::adsl |>
   blank_to_na() |>
   filter(SAFFL == "Y", TRT01A != "Screen Failure")
+
+adae <- pharmaverseadam::adae |>
+  blank_to_na() |>
+  filter(SAFFL == "Y")
 
 arm_levels <- c("Placebo", "Xanomeline Low Dose", "Xanomeline High Dose")
 arm_n <- setNames(
@@ -49,71 +54,156 @@ n_vec   <- c(arm_n, Total = N_total)
 
 ## Data Preparation
 
+::: {.panel-tabset}
+
+### dplyr
+
 ```{r}
-#| label: data-prep
+#| label: dplyr-code
 
-# ── Deaths overall ──
-death_by_arm <- adsl_saf |>
-  group_by(TRT01A) |>
-  summarise(
-    n   = sum(DTHFL == "Y", na.rm = TRUE),
-    N   = n(),
-    pct = sprintf("%d (%.1f)", n, n / N * 100),
-    .groups = "drop"
-  ) |>
-  select(TRT01A, pct) |>
-  pivot_wider(names_from = TRT01A, values_from = pct)
+n_pct <- function(n, N) sprintf("%d (%.1f)", n, n / N * 100)
 
-total_deaths <- sum(adsl_saf$DTHFL == "Y", na.rm = TRUE)
-death_overall <- death_by_arm |>
-  mutate(
-    category   = "Deaths",
-    stat_label = "Deaths, n (%)",
-    Total      = sprintf("%d (%.1f)", total_deaths, total_deaths / N_total * 100),
-    .before    = 1
-  )
-
-# ── Deaths by cause (DTHCAUS) ──
+# ── Identify deaths and TE status ──
 adsl_deaths <- adsl_saf |>
   filter(DTHFL == "Y") |>
   mutate(DTHCAUS = if_else(is.na(DTHCAUS), "Unknown", DTHCAUS))
 
-cause_levels <- sort(unique(adsl_deaths$DTHCAUS))
+# Treatment-emergent deaths: subjects with AESDTH == "Y" in ADAE
+te_death_ids <- adae |>
+  filter(AESDTH == "Y", TRTEMFL == "Y") |>
+  distinct(USUBJID) |>
+  pull(USUBJID)
 
-cause_rows <- lapply(cause_levels, function(cause) {
-  by_arm <- adsl_saf |>
-    group_by(TRT01A) |>
-    summarise(
-      n   = sum(DTHFL == "Y" & DTHCAUS == cause, na.rm = TRUE),
-      N   = n(),
-      pct = sprintf("%d (%.1f)", n, n / N * 100),
-      .groups = "drop"
+adsl_deaths <- adsl_deaths |>
+  mutate(death_type = if_else(
+    USUBJID %in% te_death_ids,
+    "Treatment-emergent deaths",
+    "Non-treatment-emergent deaths"
+  ))
+
+# ── Helper: summary row ──
+death_row <- function(data, adsl_data, row_label, category, N_total) {
+  by_arm <- data |>
+    count(TRT01A) |>
+    complete(TRT01A = arm_levels, fill = list(n = 0L)) |>
+    left_join(
+      adsl_data |> count(TRT01A, name = "N"),
+      by = "TRT01A"
     ) |>
+    mutate(pct = n_pct(n, N)) |>
     select(TRT01A, pct) |>
     pivot_wider(names_from = TRT01A, values_from = pct)
 
-  total_n <- sum(adsl_saf$DTHFL == "Y" & adsl_saf$DTHCAUS == cause, na.rm = TRUE)
+  total_n <- nrow(data)
   by_arm |>
     mutate(
-      category   = "Cause of Death",
-      stat_label = tools::toTitleCase(tolower(cause)),
-      Total      = sprintf("%d (%.1f)", total_n, total_n / N_total * 100),
+      category   = category,
+      stat_label = row_label,
+      Total      = n_pct(total_n, N_total),
       .before    = 1
     )
-})
+}
+
+# ── Total deaths ──
+total_row <- death_row(adsl_deaths, adsl_saf, "Total deaths", "Total", N_total)
+
+# ── Treatment-emergent deaths header + by cause ──
+te_deaths <- adsl_deaths |> filter(death_type == "Treatment-emergent deaths")
+te_header <- death_row(te_deaths, adsl_saf,
+                       "Treatment-emergent deaths", "Treatment-emergent", N_total)
+
+te_cause_rows <- if (nrow(te_deaths) > 0) {
+  lapply(sort(unique(te_deaths$DTHCAUS)), function(cause) {
+    death_row(
+      te_deaths |> filter(DTHCAUS == cause),
+      adsl_saf,
+      paste0("  ", tools::toTitleCase(tolower(cause))),
+      "Treatment-emergent",
+      N_total
+    )
+  }) |> bind_rows()
+} else {
+  tibble()
+}
+
+# ── Non-treatment-emergent deaths header + by cause ──
+nte_deaths <- adsl_deaths |> filter(death_type == "Non-treatment-emergent deaths")
+nte_header <- death_row(nte_deaths, adsl_saf,
+                        "Non-treatment-emergent deaths", "Non-treatment-emergent", N_total)
+
+nte_cause_rows <- if (nrow(nte_deaths) > 0) {
+  lapply(sort(unique(nte_deaths$DTHCAUS)), function(cause) {
+    death_row(
+      nte_deaths |> filter(DTHCAUS == cause),
+      adsl_saf,
+      paste0("  ", tools::toTitleCase(tolower(cause))),
+      "Non-treatment-emergent",
+      N_total
+    )
+  }) |> bind_rows()
+} else {
+  tibble()
+}
 
 # ── Combine ──
-death_wide <- bind_rows(death_overall, bind_rows(cause_rows)) |>
+death_wide <- bind_rows(
+  total_row,
+  te_header, te_cause_rows,
+  nte_header, nte_cause_rows
+) |>
   mutate(across(
     all_of(c(arm_levels, "Total")),
     ~ replace_na(.x, "0 (0.0)")
   ))
 ```
 
+### cards
+
+```{r}
+#| label: cards-code
+
+# Build subject-level flags for cards
+te_death_ids <- adae |>
+  filter(AESDTH == "Y", TRTEMFL == "Y") |>
+  distinct(USUBJID) |>
+  pull(USUBJID)
+
+death_subj <- adsl_saf |>
+  select(USUBJID, TRT01A, DTHFL, DTHCAUS) |>
+  mutate(
+    is_death    = DTHFL == "Y" & !is.na(DTHFL),
+    is_te_death = is_death & USUBJID %in% te_death_ids,
+    is_nte_death = is_death & !USUBJID %in% te_death_ids
+  )
+
+death_ard <- ard_stack(
+  data = death_subj,
+  .by  = "TRT01A",
+  ard_dichotomous(
+    variables = c(is_death, is_te_death, is_nte_death),
+    value = list(is_death = TRUE, is_te_death = TRUE, is_nte_death = TRUE)
+  ),
+  .overall = TRUE
+)
+
+death_cards <- fr_wide_ard(
+  death_ard,
+  statistic = list(dichotomous = "{n} ({p}%)"),
+  decimals  = c(p = 1),
+  label     = c(
+    is_death     = "Total deaths",
+    is_te_death  = "Treatment-emergent deaths",
+    is_nte_death = "Non-treatment-emergent deaths"
+  )
+)
+```
+
+:::
+
 
 ## arframe Pipeline
 
-The `fr_table()` pipeline is the same regardless of how the data was prepared:
+The rendered table below uses the **dplyr** data prep (`death_wide`). The cards tab produces an equivalent `death_cards` — swap it in to use the cards path instead.
 
 ```{r}
 #| label: pipeline
@@ -121,13 +211,13 @@ The `fr_table()` pipeline is the same regardless of how the data was prepared:
 death_wide |>
   fr_table() |>
   fr_titles(
-    "Table 14.3.1",
+    "Table 14.3.2",
     "Summary of Deaths",
     "Safety Population"
   ) |>
   fr_cols(
     category   = fr_col(visible = FALSE),
-    stat_label = fr_col("", width = 2.8),
+    stat_label = fr_col("Deaths", width = 3.0),
     !!!setNames(
       lapply(arm_levels, function(a) fr_col(a, align = "decimal")),
       arm_levels
@@ -140,13 +230,18 @@ death_wide |>
     group_by    = list(cols = "category", label = "stat_label"),
     blank_after = "category"
   ) |>
+  fr_styles(
+    fr_row_style(rows = which(death_wide$stat_label %in%
+      c("Total deaths", "Treatment-emergent deaths", "Non-treatment-emergent deaths")),
+      bold = TRUE)
+  ) |>
   fr_footnotes(
+    "Treatment-emergent deaths: death reported as outcome of a treatment-emergent AE.",
+    "Non-treatment-emergent deaths: deaths from ADSL not linked to a TE adverse event.",
     "Percentages based on N per treatment group.",
-    "Death cause derived from ADSL DTHCAUS variable.",
     "CDISCPILOT01 Safety Population."
   )
 ```
-
 
 ## Rendered Table
 

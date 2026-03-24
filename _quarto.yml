@@ -38,7 +38,7 @@ website:
           - text: "---"
           - text: "Study Population"
           - tables/demographic.qmd
-          - tables/demographic-categorized.qmd
+          - tables/medical-history.qmd
           - tables/disposition.qmd
           - tables/disposition-screening.qmd
           - tables/disposition-eos.qmd
@@ -55,6 +55,8 @@ website:
           - tables/ae-event-counts.qmd
           - tables/ae-exposure-adjusted.qmd
           - tables/ae-subgroup.qmd
+          - tables/ae-sae-soc-pt.qmd
+          - tables/ae-discontinuation.qmd
           - tables/death-summary.qmd
           - tables/vitals.qmd
           - tables/lab-chemistry.qmd

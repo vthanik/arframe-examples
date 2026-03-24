@@ -1,6 +1,6 @@
 ---
 title: "Overall Safety Summary"
-subtitle: "Overall Safety Summary"
+subtitle: "Overview of Adverse Events"
 execute:
   echo: true
   eval: true
@@ -12,6 +12,14 @@ execute:
 #| include: false
 library(arframe)
 fr_theme(hlines = "header", font_family = "Courier New")
+
+blank_to_na <- function(df) {
+  df[] <- lapply(df, function(x) {
+    if (is.character(x)) x[x == ""] <- NA_character_
+    x
+  })
+  df
+}
 ```
 
 ## Setup
@@ -26,42 +34,21 @@ library(dplyr, warn.conflicts = FALSE)
 library(tidyr)
 library(cards)
 
-blank_to_na <- function(df) {
-  df[] <- lapply(df, function(x) {
-    if (is.character(x)) x[x == ""] <- NA_character_
-    x
-  })
-  df
-}
-
-# Safety population denominator from ADSL
 adsl_saf <- pharmaverseadam::adsl |>
   blank_to_na() |>
   filter(SAFFL == "Y", TRT01A != "Screen Failure")
 
-# ADAE: treatment-emergent AEs in safety population
 adae <- pharmaverseadam::adae |>
   blank_to_na() |>
   filter(SAFFL == "Y", TRTEMFL == "Y")
 
 arm_levels <- c("Placebo", "Xanomeline Low Dose", "Xanomeline High Dose")
-arm_n      <- setNames(
+arm_n <- setNames(
   vapply(arm_levels, function(a) sum(adsl_saf$TRT01A == a), integer(1L)),
   arm_levels
 )
-N_total    <- nrow(adsl_saf)
-n_vec      <- c(arm_n, Total = N_total)
-
-# AE category definitions (flag variable -> display label)
-# AEACNOTH does not exist in pharmaverseadam::adae; use AEACN == "DRUG WITHDRAWN"
-# for discontinuation and AESDTH == "Y" / AEOUT == "FATAL" for death.
-ae_categories <- list(
-  list(flag = "TRTEMFL", label = "Any TEAE"),
-  list(flag = "AESER",   label = "Any Serious AE (SAE)"),
-  list(flag = "AESDTH",  label = "Any AE Leading to Death"),
-  list(flag = "AEACN",   label = "Any AE Leading to Discontinuation",
-       flag_value = "DRUG WITHDRAWN")
-)
+N_total <- nrow(adsl_saf)
+n_vec   <- c(arm_n, Total = N_total)
 ```
 
 
@@ -74,13 +61,13 @@ ae_categories <- list(
 ```{r}
 #| label: dplyr-code
 
-# ── Helper: subjects with flag == flag_value in adae, per arm + Total ──
-# flag_value defaults to "Y" for standard dichotomous flags.
-ae_flag_row <- function(ae_data, adsl_data, flag_var, row_label, arm_levels, N_total,
-                        flag_value = "Y") {
-  # Unique subjects in adae with flag == flag_value
+# ── Helper: count unique subjects with a condition, per arm + Total ──
+ae_flag_row <- function(ae_data, adsl_data, condition, row_label,
+                        arm_levels, N_total) {
+  condition <- rlang::enquo(condition)
+
   flag_subjs <- ae_data |>
-    filter(.data[[flag_var]] == flag_value) |>
+    filter(!!condition) |>
     distinct(USUBJID, TRT01A)
 
   by_arm <- flag_subjs |>
@@ -97,24 +84,63 @@ ae_flag_row <- function(ae_data, adsl_data, flag_var, row_label, arm_levels, N_t
   total_n <- n_distinct(flag_subjs$USUBJID)
   by_arm |>
     mutate(
+      category   = "",
       stat_label = row_label,
       Total      = sprintf("%d (%.1f)", total_n, total_n / N_total * 100),
       .before    = 1
     )
 }
 
-ae_wide <- lapply(ae_categories, function(cat) {
-  ae_flag_row(
-    ae_data    = adae,
-    adsl_data  = adsl_saf,
-    flag_var   = cat$flag,
-    row_label  = cat$label,
-    arm_levels = arm_levels,
-    N_total    = N_total,
-    flag_value = if (!is.null(cat$flag_value)) cat$flag_value else "Y"
-  )
-}) |>
-  bind_rows()
+# ── Severity helper: count by max severity per subject ──
+severity_rows <- function(ae_data, adsl_data, arm_levels, N_total) {
+  sev_order <- c("MILD", "MODERATE", "SEVERE")
+
+  max_sev <- ae_data |>
+    mutate(sev_n = match(AESEV, sev_order)) |>
+    group_by(USUBJID, TRT01A) |>
+    summarise(max_sev = sev_order[max(sev_n, na.rm = TRUE)], .groups = "drop")
+
+  lapply(sev_order, function(s) {
+    subjs <- max_sev |> filter(max_sev == s) |> distinct(USUBJID, TRT01A)
+
+    by_arm <- subjs |>
+      count(TRT01A) |>
+      complete(TRT01A = arm_levels, fill = list(n = 0L)) |>
+      left_join(
+        adsl_data |> count(TRT01A, name = "N"),
+        by = "TRT01A"
+      ) |>
+      mutate(pct = sprintf("%d (%.1f)", n, n / N * 100)) |>
+      select(TRT01A, pct) |>
+      pivot_wider(names_from = TRT01A, values_from = pct)
+
+    total_n <- n_distinct(subjs$USUBJID)
+    by_arm |>
+      mutate(
+        category   = "Maximum Severity",
+        stat_label = tools::toTitleCase(tolower(s)),
+        Total      = sprintf("%d (%.1f)", total_n, total_n / N_total * 100),
+        .before    = 1
+      )
+  }) |> bind_rows()
+}
+
+# ── Build all rows matching FDA Table 6 ──
+ae_wide <- bind_rows(
+  ae_flag_row(adae, adsl_saf, TRUE,
+              "Any TEAE", arm_levels, N_total),
+  ae_flag_row(adae, adsl_saf, AESER == "Y",
+              "Any Serious AE (SAE)", arm_levels, N_total),
+  ae_flag_row(adae, adsl_saf, AESDTH == "Y",
+              "Any AE Leading to Death", arm_levels, N_total),
+  ae_flag_row(adae, adsl_saf, AEREL %in% c("POSSIBLE", "PROBABLE"),
+              "Any AE Related to Study Drug", arm_levels, N_total),
+  severity_rows(adae, adsl_saf, arm_levels, N_total)
+) |>
+  mutate(across(
+    all_of(c(arm_levels, "Total")),
+    ~ replace_na(.x, "0 (0.0)")
+  ))
 ```
 
 ### cards
@@ -129,44 +155,55 @@ ae_subj <- adsl_saf |>
     adae |>
       group_by(USUBJID) |>
       summarise(
-        any_teae  = any(TRTEMFL == "Y",             na.rm = TRUE),
-        any_sae   = any(AESER   == "Y",             na.rm = TRUE),
-        any_death = any(AESDTH  == "Y",             na.rm = TRUE),
-        any_dc    = any(AEACN   == "DRUG WITHDRAWN", na.rm = TRUE),
+        any_teae    = any(TRTEMFL == "Y", na.rm = TRUE),
+        any_sae     = any(AESER == "Y", na.rm = TRUE),
+        any_death   = any(AESDTH == "Y", na.rm = TRUE),
+        any_related = any(AEREL %in% c("POSSIBLE", "PROBABLE"), na.rm = TRUE),
+        max_sev     = if (all(is.na(AESEV))) NA_character_
+                      else c("MILD", "MODERATE", "SEVERE")[
+                        max(match(AESEV, c("MILD", "MODERATE", "SEVERE")),
+                            na.rm = TRUE)],
         .groups = "drop"
       ),
     by = "USUBJID"
   ) |>
-  mutate(across(c(any_teae, any_sae, any_death, any_dc), ~ replace_na(.x, FALSE)))
+  mutate(
+    across(c(any_teae, any_sae, any_death, any_related),
+           ~ replace_na(.x, FALSE)),
+    max_sev = factor(max_sev, levels = c("MILD", "MODERATE", "SEVERE"))
+  )
 
 ae_ard <- ard_stack(
   data = ae_subj,
   .by  = "TRT01A",
   ard_dichotomous(
-    variables = c(any_teae, any_sae, any_death, any_dc),
+    variables = c(any_teae, any_sae, any_death, any_related),
     value     = list(
-      any_teae  = TRUE,
-      any_sae   = TRUE,
-      any_death = TRUE,
-      any_dc    = TRUE
+      any_teae    = TRUE,
+      any_sae     = TRUE,
+      any_death   = TRUE,
+      any_related = TRUE
     )
   ),
+  ard_categorical(variables = "max_sev"),
   .overall = TRUE
 )
 
 ae_wide_cards <- fr_wide_ard(
   ae_ard,
-  statistic = list(dichotomous = "{n} ({p}%)"),
-  decimals  = c(p = 1),
-  label     = c(
-    any_teae  = "Any TEAE",
-    any_sae   = "Any Serious AE (SAE)",
-    any_death = "Any AE Leading to Death",
-    any_dc    = "Any AE Leading to Discontinuation"
+  statistic = list(
+    dichotomous = "{n} ({p}%)",
+    categorical = "{n} ({p}%)"
+  ),
+  decimals = c(p = 1),
+  label = c(
+    any_teae    = "Any TEAE",
+    any_sae     = "Any Serious AE (SAE)",
+    any_death   = "Any AE Leading to Death",
+    any_related = "Any AE Related to Study Drug",
+    max_sev     = "Maximum Severity"
   )
-) |>
-  select(-stat_label) |>
-  rename(stat_label = variable)
+)
 ```
 
 :::
@@ -183,11 +220,12 @@ ae_wide |>
   fr_table() |>
   fr_titles(
     "Table 14.3.1",
-    "Overall Safety Summary",
+    "Overview of Adverse Events",
     "Safety Population"
   ) |>
   fr_cols(
-    stat_label = fr_col("", width = 3.2),
+    category   = fr_col(visible = FALSE),
+    stat_label = fr_col("Event", width = 3.2),
     !!!setNames(
       lapply(arm_levels, function(a) fr_col(a, align = "decimal")),
       arm_levels
@@ -196,19 +234,26 @@ ae_wide |>
     .n = n_vec
   ) |>
   fr_header(bold = TRUE, align = "center") |>
+  fr_rows(
+    group_by    = list(cols = "category", label = "stat_label"),
+    blank_after = "category"
+  ) |>
+  fr_styles(
+    fr_row_style(rows = 1L, bold = TRUE)
+  ) |>
   fr_footnotes(
-    "TEAEs = Treatment-Emergent Adverse Events (onset on or after first dose).",
-    "Subjects counted once per category regardless of number of events.",
-    "Percentages based on N per treatment group.",
+    "TEAE = Treatment-Emergent Adverse Event (onset on or after first dose of study drug).",
+    "Related = Investigator-assessed relationship of Possible or Probable.",
+    "Maximum severity = worst severity across all TEAEs per subject.",
+    "Subjects counted once per category. Percentages based on N per treatment group.",
     "CDISCPILOT01 Safety Population."
   )
 ```
 
-
 ## Rendered Table
 
 ```{r}
-#| label: rendered-table
+#| label: table
 #| echo: false
 #| ref.label: pipeline
 ```

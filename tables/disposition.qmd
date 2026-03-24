@@ -1,6 +1,6 @@
 ---
 title: "Disposition Summary"
-subtitle: "Disposition - Treatment or Follow-up Summary"
+subtitle: "Subject Disposition — Treatment or Follow-up Summary"
 execute:
   echo: true
   eval: true
@@ -12,6 +12,14 @@ execute:
 #| include: false
 library(arframe)
 fr_theme(hlines = "header", font_family = "Courier New")
+
+blank_to_na <- function(df) {
+  df[] <- lapply(df, function(x) {
+    if (is.character(x)) x[x == ""] <- NA_character_
+    x
+  })
+  df
+}
 ```
 
 ## Setup
@@ -26,26 +34,17 @@ library(dplyr, warn.conflicts = FALSE)
 library(tidyr)
 library(cards)
 
-blank_to_na <- function(df) {
-  df[] <- lapply(df, function(x) {
-    if (is.character(x)) x[x == ""] <- NA_character_
-    x
-  })
-  df
-}
-
 adsl_saf <- pharmaverseadam::adsl |>
   blank_to_na() |>
   filter(SAFFL == "Y", TRT01A != "Screen Failure")
 
 arm_levels <- c("Placebo", "Xanomeline Low Dose", "Xanomeline High Dose")
-arm_n      <- setNames(
+arm_n <- setNames(
   vapply(arm_levels, function(a) sum(adsl_saf$TRT01A == a), integer(1L)),
   arm_levels
 )
-
-# pharmaverseadam::adsl has no DCSREAS column; only EOSSTT is available.
-# Discontinuation reasons cannot be broken down further from this dataset.
+N_total <- nrow(adsl_saf)
+n_vec   <- c(arm_n, Total = N_total)
 ```
 
 
@@ -57,87 +56,89 @@ arm_n      <- setNames(
 
 ```{r}
 #| label: dplyr-code
-N_total <- nrow(adsl_saf)
 
-# ── Helper: n (%) for a logical flag per arm + Total ──
-flag_row <- function(data, flag_expr, row_label, category) {
-  flag_expr <- rlang::enquo(flag_expr)
+n_pct <- function(n, N) sprintf("%d (%.1f)", n, n / N * 100)
+
+# ── Helper: count row per arm + Total ──
+disp_row <- function(data, condition, row_label, category, N_total,
+                     format = "n_pct") {
+  condition <- rlang::enquo(condition)
   by_arm <- data |>
     group_by(TRT01A) |>
-    summarise(
-      n   = sum(!!flag_expr, na.rm = TRUE),
-      N   = n(),
-      pct = sprintf("%d (%.1f)", n, n / N * 100),
-      .groups = "drop"
-    ) |>
-    select(TRT01A, pct) |>
-    pivot_wider(names_from = TRT01A, values_from = pct)
+    summarise(n = sum(!!condition, na.rm = TRUE), N = n(), .groups = "drop")
 
-  total_n <- sum(rlang::eval_tidy(flag_expr, data = data), na.rm = TRUE)
+  total_n <- sum(rlang::eval_tidy(condition, data = data), na.rm = TRUE)
+
+  if (format == "n_pct") {
+    by_arm <- by_arm |>
+      mutate(val = n_pct(n, N)) |>
+      select(TRT01A, val) |>
+      pivot_wider(names_from = TRT01A, values_from = val)
+    total_val <- n_pct(total_n, N_total)
+  } else {
+    by_arm <- by_arm |>
+      mutate(val = as.character(n)) |>
+      select(TRT01A, val) |>
+      pivot_wider(names_from = TRT01A, values_from = val)
+    total_val <- as.character(total_n)
+  }
+
   by_arm |>
-    mutate(
-      category   = category,
-      stat_label = row_label,
-      Total      = sprintf("%d (%.1f)", total_n, total_n / N_total * 100),
-      .before    = 1
-    )
+    mutate(category = category, stat_label = row_label,
+           Total = total_val, .before = 1)
 }
 
-# ── Enrolled: count subjects per arm directly ──
-enrolled_counts <- adsl_saf |>
-  count(TRT01A) |>
-  pivot_wider(names_from = TRT01A, values_from = n)
-
-enrolled_row <- enrolled_counts |>
+# ── Derive disposition reason from EOSSTT + DTHCAUS ──
+# pharmaverseadam ADSL has EOSSTT but no DCSREAS.
+# Derive reason from DTHFL, DTHCAUS, and EOSSTT.
+adsl_disp <- adsl_saf |>
   mutate(
-    category   = "Enrolled",
-    stat_label = "Enrolled",
-    Total      = sprintf("%d", N_total),
-    across(all_of(arm_levels), ~ sprintf("%d", .x)),
-    .before    = 1
+    disp_status = case_when(
+      EOSSTT == "COMPLETED"    ~ "Completed",
+      EOSSTT == "DISCONTINUED" ~ "Discontinued",
+      is.na(EOSSTT)            ~ "Ongoing",
+      TRUE                     ~ EOSSTT
+    ),
+    disc_reason = case_when(
+      disp_status != "Discontinued" ~ NA_character_,
+      DTHFL == "Y"                  ~ "Death",
+      TRUE                          ~ "Other"
+    )
   )
 
-# ── Randomized ──
-rand_row <- flag_row(adsl_saf, !is.na(TRT01A), "Randomized", "Randomized")
+# ── Build rows ──
+enrolled_row <- disp_row(adsl_disp, TRUE, "Enrolled", "Enrollment",
+                         N_total, format = "n")
 
-# ── Completed ──
-completed_row <- flag_row(
-  adsl_saf,
-  EOSSTT == "COMPLETED",
-  "Completed",
-  "Completed"
-)
+completed_row <- disp_row(adsl_disp, disp_status == "Completed",
+                          "Completed", "Completion", N_total)
 
-# ── Discontinued ──
-# pharmaverseadam::adsl has no DCSREAS column so per-reason rows are omitted.
-disc_header <- flag_row(
-  adsl_saf,
-  EOSSTT == "DISCONTINUED",
-  "Discontinued",
-  "Discontinued"
-)
+disc_header <- disp_row(adsl_disp, disp_status == "Discontinued",
+                        "Discontinued", "Discontinuation", N_total)
 
-# ── Combine ──
+# Discontinuation reasons
+disc_reasons <- adsl_disp |>
+  filter(disp_status == "Discontinued") |>
+  pull(disc_reason) |>
+  na.omit() |>
+  unique() |>
+  sort()
+
+disc_reason_rows <- lapply(disc_reasons, function(reason) {
+  disp_row(adsl_disp, disp_status == "Discontinued" & disc_reason == reason,
+           paste0("  ", reason), "Discontinuation", N_total)
+}) |> bind_rows()
+
+ongoing_row <- disp_row(adsl_disp, disp_status == "Ongoing",
+                        "Ongoing", "Ongoing", N_total)
+
 disp_wide <- bind_rows(
-  enrolled_row,
-  rand_row,
-  completed_row,
-  disc_header
+  enrolled_row, completed_row,
+  disc_header, disc_reason_rows,
+  ongoing_row
 ) |>
-  mutate(across(
-    all_of(c(arm_levels, "Total")),
-    ~ replace_na(.x, "0 (0.0)")
-  ))
-
-# Enrolled/Randomized rows show plain counts (no percentage)
-disp_wide <- disp_wide |>
-  mutate(across(
-    all_of(c(arm_levels, "Total")),
-    ~ if_else(.x == "0 (0.0)" & stat_label %in% c("Enrolled", "Randomized"),
-              "0", .x)
-  ))
-
-n_vec <- c(arm_n, Total = N_total)
+  mutate(across(all_of(c(arm_levels, "Total")),
+                ~ replace_na(.x, "0 (0.0)")))
 ```
 
 ### cards
@@ -145,15 +146,13 @@ n_vec <- c(arm_n, Total = N_total)
 ```{r}
 #| label: cards-code
 
-# cards works best with a single categorical variable.
-# Build a derived disposition status variable.
 adsl_disp <- adsl_saf |>
   mutate(
     DISP_CAT = case_when(
       EOSSTT == "COMPLETED"    ~ "Completed",
       EOSSTT == "DISCONTINUED" ~ "Discontinued",
       is.na(EOSSTT)            ~ "Ongoing",
-      TRUE                     ~ "Other"
+      TRUE                     ~ EOSSTT
     )
   )
 
@@ -164,12 +163,11 @@ disp_ard <- ard_stack(
   .overall = TRUE
 )
 
-# Note: cards output uses variable/stat_label vs dplyr's category/stat_label
 disp_cards <- fr_wide_ard(
   disp_ard,
   statistic = list(categorical = "{n} ({p}%)"),
   decimals  = c(p = 1),
-  label     = c(DISP_CAT = "Disposition")
+  label     = c(DISP_CAT = "Disposition Status")
 )
 ```
 
@@ -187,7 +185,7 @@ disp_wide |>
   fr_table() |>
   fr_titles(
     "Table 14.1.3",
-    "Disposition - Treatment or Follow-up Summary",
+    "Subject Disposition",
     "Safety Population"
   ) |>
   fr_cols(
@@ -205,10 +203,13 @@ disp_wide |>
     group_by    = list(cols = "category", label = "stat_label"),
     blank_after = "category"
   ) |>
-  fr_styles(fr_row_style(rows = bold_rows, bold = TRUE)) |>
+  fr_styles(
+    fr_row_style(rows = which(disp_wide$stat_label %in%
+      c("Enrolled", "Completed", "Discontinued")), bold = TRUE)
+  ) |>
   fr_footnotes(
     "Percentages based on N per treatment group.",
-    "Discontinued includes all subjects who did not complete the study.",
+    "Discontinued reasons derived from ADSL (DTHFL, EOSSTT).",
     "CDISCPILOT01 Safety Population."
   )
 ```
@@ -217,15 +218,7 @@ disp_wide |>
 ## Rendered Table
 
 ```{r}
-#| label: pre-render
-#| include: false
-
-# Bold rows: "Completed" and "Discontinued" category headers
-bold_rows <- which(disp_wide$stat_label %in% c("Completed", "Discontinued"))
-```
-
-```{r}
-#| label: rendered-table
+#| label: table
 #| echo: false
 #| ref.label: pipeline
 ```

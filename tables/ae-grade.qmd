@@ -40,10 +40,11 @@ adsl_saf <- pharmaverseadam::adsl |>
 
 adae_teae <- pharmaverseadam::adae |>
   blank_to_na() |>
-  filter(TRTEMFL == "Y", TRT01A != "Screen Failure")
+  filter(TRTEMFL == "Y", TRT01A != "Screen Failure") |>
+  mutate(AESEV = factor(AESEV, levels = c("MILD", "MODERATE", "SEVERE")))
 
 arm_levels <- c("Placebo", "Xanomeline Low Dose", "Xanomeline High Dose")
-sev_levels <- c("MILD", "MODERATE", "SEVERE")
+sev_levels <- levels(adae_teae$AESEV)
 
 arm_n <- adsl_saf |>
   filter(TRT01A %in% arm_levels) |>
@@ -82,9 +83,10 @@ pivot_arm_sev <- function(df, value_col = "value") {
 
 # ── SOC × severity ──
 soc_sev_arm <- adae_teae |>
-  filter(TRT01A %in% arm_levels, AESEV %in% sev_levels) |>
+  filter(TRT01A %in% arm_levels) |>
   distinct(USUBJID, TRT01A, AEBODSYS, AESEV) |>
-  count(TRT01A, AEBODSYS, AESEV) |>
+  count(TRT01A, AEBODSYS, AESEV, .drop = FALSE) |>
+  filter(!is.na(AEBODSYS)) |>
   mutate(value = mapply(n_pct, n, arm_n[TRT01A])) |>
   select(TRT01A, AEBODSYS, AESEV, value) |>
   pivot_arm_sev()
@@ -104,9 +106,10 @@ soc_wide <- adae_teae |>
 
 # ── PT × severity ──
 pt_sev_arm <- adae_teae |>
-  filter(TRT01A %in% arm_levels, AESEV %in% sev_levels) |>
+  filter(TRT01A %in% arm_levels) |>
   distinct(USUBJID, TRT01A, AEBODSYS, AEDECOD, AESEV) |>
-  count(TRT01A, AEBODSYS, AEDECOD, AESEV) |>
+  count(TRT01A, AEBODSYS, AEDECOD, AESEV, .drop = FALSE) |>
+  filter(!is.na(AEBODSYS), !is.na(AEDECOD)) |>
   mutate(value = mapply(n_pct, n, arm_n[TRT01A])) |>
   select(TRT01A, AEBODSYS, AEDECOD, AESEV, value) |>
   pivot_arm_sev()

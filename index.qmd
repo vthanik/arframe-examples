@@ -22,7 +22,7 @@ Submission-ready clinical trial tables and listings. Every example runs — pick
 
 ### [Demographics Summary](tables/demographic.qmd)
 
-[Continuous + categorical statistics by treatment arm with Total column. Group headers, blank-after, decimal alignment.]{.card-desc}
+[Continuous + categorical statistics by treatment arm with Total column. Age, age group, sex, race, ethnicity. Group headers, blank-after, decimal alignment.]{.card-desc}
 
 ::: {.card-tags}
 [decimal]{.tag .tag-decimal}
@@ -33,12 +33,12 @@ Submission-ready clinical trial tables and listings. Every example runs — pick
 ::: {.tlg-card}
 [TABLE · STUDY POPULATION]{.card-type}
 
-### [Demographics with Categorization](tables/demographic-categorized.qmd)
+### [Medical History](tables/medical-history.qmd)
 
-[Demographics with age group (AGEGR1) and race group (RACEGR1) categorization.]{.card-desc}
+[Medical history by SOC and preferred term. Hierarchical layout with indentation.]{.card-desc}
 
 ::: {.card-tags}
-[decimal]{.tag .tag-decimal}
+[hierarchy]{.tag .tag-hierarchy}
 [cards]{.tag .tag-cards}
 :::
 :::
@@ -52,6 +52,7 @@ Submission-ready clinical trial tables and listings. Every example runs — pick
 
 ::: {.card-tags}
 [decimal]{.tag .tag-decimal}
+[cards]{.tag .tag-cards}
 :::
 :::
 
@@ -192,6 +193,32 @@ Submission-ready clinical trial tables and listings. Every example runs — pick
 ::: {.card-tags}
 [decimal]{.tag .tag-decimal}
 [split]{.tag .tag-split}
+:::
+:::
+
+::: {.tlg-card}
+[TABLE · SAFETY]{.card-type}
+
+### [Serious AEs by SOC and PT](tables/ae-sae-soc-pt.qmd)
+
+[Serious adverse events by system organ class and preferred term. Hierarchical with bold SOC rows.]{.card-desc}
+
+::: {.card-tags}
+[hierarchy]{.tag .tag-hierarchy}
+[cards]{.tag .tag-cards}
+:::
+:::
+
+::: {.tlg-card}
+[TABLE · SAFETY]{.card-type}
+
+### [AEs Leading to Discontinuation](tables/ae-discontinuation.qmd)
+
+[Treatment-emergent AEs leading to study drug discontinuation by SOC and PT.]{.card-desc}
+
+::: {.card-tags}
+[hierarchy]{.tag .tag-hierarchy}
+[cards]{.tag .tag-cards}
 :::
 :::
 
