@@ -171,8 +171,8 @@ vs_wide |>
   fr_cols(
     PARAMCD    = fr_col(visible = FALSE),
     PARAM      = fr_col(visible = FALSE),
-    AVISIT     = fr_col("Visit", width = 1.5),
-    TRT01A     = fr_col("Treatment", width = 1.5),
+    AVISIT     = fr_col(visible = FALSE),
+    TRT01A     = fr_col("", width = 1.5),
     val_n      = fr_col("N",      align = "decimal", width = 0.5),
     val_mean   = fr_col("Mean",   align = "decimal", width = 0.7),
     val_sd     = fr_col("SD",     align = "decimal", width = 0.7),
@@ -193,7 +193,7 @@ vs_wide |>
   ) |>
   fr_header(bold = TRUE, align = "center") |>
   fr_rows(
-    group_by    = "AVISIT",
+    group_by    = list(cols = "AVISIT", label = "TRT01A"),
     blank_after = "AVISIT",
     page_by     = "PARAM"
   ) |>

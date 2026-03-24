@@ -199,8 +199,8 @@ lab_wide |>
   fr_cols(
     PARAMCD        = fr_col(visible = FALSE),
     PARAM          = fr_col(visible = FALSE),
-    direction      = fr_col(visible = FALSE),
-    criteria_label = fr_col("Parameter \u2014 Direction", width = 2.8),
+    criteria_label = fr_col(visible = FALSE),
+    direction      = fr_col("", width = 2.8),
     !!!setNames(
       lapply(arm_levels, function(a) fr_col(a, align = "decimal")),
       arm_levels
@@ -210,7 +210,7 @@ lab_wide |>
   ) |>
   fr_header(bold = TRUE, align = "center") |>
   fr_rows(
-    group_by    = "PARAMCD",
+    group_by    = list(cols = "PARAMCD", label = "direction"),
     blank_after = "PARAMCD"
   ) |>
   fr_footnotes(

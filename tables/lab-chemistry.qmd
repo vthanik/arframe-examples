@@ -178,8 +178,8 @@ lab_wide |>
   fr_cols(
     PARAMCD    = fr_col(visible = FALSE),
     PARAM      = fr_col(visible = FALSE),
-    AVISIT     = fr_col("Visit", width = 1.5),
-    stat_label = fr_col("Statistic", width = 1.5),
+    AVISIT     = fr_col(visible = FALSE),
+    stat_label = fr_col("", width = 1.5),
     !!!setNames(
       lapply(arm_levels, function(a) fr_col(a, align = "decimal")),
       arm_levels
@@ -188,7 +188,7 @@ lab_wide |>
   ) |>
   fr_header(bold = TRUE, align = "center") |>
   fr_rows(
-    group_by    = "AVISIT",
+    group_by    = list(cols = "AVISIT", label = "stat_label"),
     blank_after = "AVISIT",
     page_by     = "PARAM"
   ) |>

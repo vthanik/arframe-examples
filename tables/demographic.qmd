@@ -38,7 +38,7 @@ adsl_saf <- pharmaverseadam::adsl |>
   blank_to_na() |>
   filter(SAFFL == "Y", TRT01A != "Screen Failure") |>
   mutate(
-    AGEGR1 = factor(AGEGR1, levels = c("<65", "65-80", ">80")),
+    AGEGR1 = factor(AGEGR1, levels = c("18-64", ">64")),
     SEX    = factor(SEX, levels = c("F", "M")),
     RACE   = factor(RACE, levels = c(
       "WHITE", "BLACK OR AFRICAN AMERICAN", "ASIAN",
