@@ -134,6 +134,32 @@ Submission-ready clinical trial tables and listings. Every example runs — pick
 ::: {.tlg-card}
 [TABLE · SAFETY]{.card-type}
 
+### [AEs Related to Study Drug](tables/ae-related.qmd)
+
+[Treatment-emergent AEs related to study drug (possible/probable) by SOC and PT.]{.card-desc}
+
+::: {.card-tags}
+[hierarchy]{.tag .tag-hierarchy}
+[cards]{.tag .tag-cards}
+:::
+:::
+
+::: {.tlg-card}
+[TABLE · SAFETY]{.card-type}
+
+### [Common Adverse Events](tables/ae-common.qmd)
+
+[Preferred terms occurring at ≥5% in any treatment arm. Sorted by frequency.]{.card-desc}
+
+::: {.card-tags}
+[decimal]{.tag .tag-decimal}
+[cards]{.tag .tag-cards}
+:::
+:::
+
+::: {.tlg-card}
+[TABLE · SAFETY]{.card-type}
+
 ### [AE by Grade/Intensity](tables/ae-grade.qmd)
 
 [Adverse events by maximum CTCAE grade per treatment arm.]{.card-desc}
@@ -299,6 +325,18 @@ Submission-ready clinical trial tables and listings. Every example runs — pick
 ::: {.card-tags}
 [decimal]{.tag .tag-decimal}
 [cards]{.tag .tag-cards}
+:::
+:::
+
+::: {.tlg-card}
+[TABLE · EFFICACY]{.card-type}
+
+### [Time to Event Summary](tables/tte-summary.qmd)
+
+[Overall survival with KM median, quartiles, hazard ratio, and log-rank p-value.]{.card-desc}
+
+::: {.card-tags}
+[decimal]{.tag .tag-decimal}
 :::
 :::
 

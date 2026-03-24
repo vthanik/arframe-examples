@@ -1,0 +1,226 @@
+---
+title: "AEs Related to Study Drug"
+subtitle: "Treatment-Emergent AEs Related to Study Drug by SOC and PT"
+execute:
+  echo: true
+  eval: true
+---
+
+
+```{r}
+#| label: prereqs
+#| include: false
+library(arframe)
+fr_theme(hlines = "header", font_family = "Courier New")
+
+blank_to_na <- function(df) {
+  df[] <- lapply(df, function(x) {
+    if (is.character(x)) x[x == ""] <- NA_character_
+    x
+  })
+  df
+}
+```
+
+## Setup
+
+See [Prerequisites](../install.qmd) for installation instructions.
+
+```{r}
+#| label: setup
+library(arframe)
+library(pharmaverseadam)
+library(dplyr, warn.conflicts = FALSE)
+library(tidyr)
+library(cards)
+
+adsl_saf <- pharmaverseadam::adsl |>
+  blank_to_na() |>
+  filter(SAFFL == "Y", TRT01A != "Screen Failure")
+
+# Related AEs: investigator-assessed relationship of POSSIBLE or PROBABLE
+adae_rel <- pharmaverseadam::adae |>
+  blank_to_na() |>
+  filter(SAFFL == "Y", TRTEMFL == "Y", AEREL %in% c("POSSIBLE", "PROBABLE"))
+
+arm_levels <- c("Placebo", "Xanomeline Low Dose", "Xanomeline High Dose")
+arm_n <- adsl_saf |>
+  filter(TRT01A %in% arm_levels) |>
+  count(TRT01A) |> pull(n, name = TRT01A)
+arm_n <- arm_n[arm_levels]
+N_total <- nrow(adsl_saf)
+n_vec <- c(arm_n, Total = N_total)
+```
+
+
+## Data Preparation
+
+::: {.panel-tabset}
+
+### dplyr
+
+```{r}
+#| label: dplyr-code
+
+n_pct <- function(n, denom) sprintf("%d (%.1f)", n, n / denom * 100)
+
+# ── Overall row ──
+any_rel_arm <- adae_rel |>
+  distinct(USUBJID, TRT01A) |>
+  count(TRT01A) |>
+  filter(TRT01A %in% arm_levels) |>
+  mutate(value = mapply(n_pct, n, arm_n[TRT01A])) |>
+  select(TRT01A, value) |>
+  pivot_wider(names_from = TRT01A, values_from = value)
+
+any_rel_total <- n_distinct(adae_rel$USUBJID)
+
+any_rel_row <- bind_cols(
+  tibble(soc = "TOTAL SUBJECTS WITH A RELATED TEAE",
+         pt = "TOTAL SUBJECTS WITH A RELATED TEAE", row_type = "overall"),
+  any_rel_arm,
+  tibble(Total = n_pct(any_rel_total, N_total))
+)
+
+# ── SOC-level ──
+soc_arm <- adae_rel |>
+  distinct(USUBJID, TRT01A, AEBODSYS) |>
+  count(TRT01A, AEBODSYS) |>
+  filter(TRT01A %in% arm_levels) |>
+  mutate(value = mapply(n_pct, n, arm_n[TRT01A])) |>
+  select(TRT01A, AEBODSYS, value) |>
+  pivot_wider(names_from = TRT01A, values_from = value)
+
+soc_total <- adae_rel |>
+  distinct(USUBJID, AEBODSYS) |>
+  count(AEBODSYS) |>
+  mutate(Total = n_pct(n, N_total)) |>
+  select(AEBODSYS, Total)
+
+soc_wide <- left_join(soc_arm, soc_total, by = "AEBODSYS") |>
+  mutate(soc = AEBODSYS, pt = AEBODSYS, row_type = "soc", .before = 1) |>
+  select(-AEBODSYS)
+
+# ── PT-level ──
+pt_arm <- adae_rel |>
+  distinct(USUBJID, TRT01A, AEBODSYS, AEDECOD) |>
+  count(TRT01A, AEBODSYS, AEDECOD) |>
+  filter(TRT01A %in% arm_levels) |>
+  mutate(value = mapply(n_pct, n, arm_n[TRT01A])) |>
+  select(TRT01A, AEBODSYS, AEDECOD, value) |>
+  pivot_wider(names_from = TRT01A, values_from = value)
+
+pt_total <- adae_rel |>
+  distinct(USUBJID, AEBODSYS, AEDECOD) |>
+  count(AEBODSYS, AEDECOD) |>
+  mutate(Total = n_pct(n, N_total)) |>
+  select(AEBODSYS, AEDECOD, Total)
+
+pt_wide <- left_join(pt_arm, pt_total, by = c("AEBODSYS", "AEDECOD")) |>
+  mutate(soc = AEBODSYS, pt = AEDECOD, row_type = "pt", .before = 1) |>
+  select(-AEBODSYS, -AEDECOD)
+
+# ── Sort and interleave ──
+soc_order <- adae_rel |>
+  distinct(USUBJID, AEBODSYS) |>
+  count(AEBODSYS, name = "soc_n") |>
+  arrange(desc(soc_n)) |> pull(AEBODSYS)
+
+ae_rel_wide <- bind_rows(
+  any_rel_row,
+  bind_rows(lapply(soc_order, function(s) {
+    bind_rows(
+      filter(soc_wide, soc == s),
+      filter(pt_wide, soc == s) |>
+        left_join(
+          adae_rel |> distinct(USUBJID, AEBODSYS, AEDECOD) |>
+            count(AEBODSYS, AEDECOD, name = "pt_n"),
+          by = c("soc" = "AEBODSYS", "pt" = "AEDECOD")
+        ) |> arrange(desc(pt_n)) |> select(-pt_n)
+    )
+  }))
+) |>
+  mutate(across(where(is.character) & !c(soc, pt, row_type),
+                ~ replace_na(.x, "0 (0.0)")))
+
+for (a in arm_levels) {
+  if (!a %in% names(ae_rel_wide)) ae_rel_wide[[a]] <- "0 (0.0)"
+}
+```
+
+### cards
+
+```{r}
+#| label: cards-code
+rel_ard <- ard_stack_hierarchical(
+  data        = adae_rel,
+  variables   = c(AEBODSYS, AEDECOD),
+  by          = TRT01A,
+  denominator = adsl_saf,
+  id          = USUBJID,
+  overall     = TRUE,
+  over_variables = TRUE
+) |>
+  sort_ard_hierarchical(sort = "descending")
+
+ae_rel_cards <- fr_wide_ard(
+  rel_ard,
+  statistic = "{n} ({p}%)",
+  decimals  = c(p = 1),
+  label     = c(
+    "..ard_hierarchical_overall.." = "TOTAL SUBJECTS WITH A RELATED TEAE",
+    AEBODSYS = "System Organ Class",
+    AEDECOD  = "Preferred Term"
+  )
+)
+```
+
+:::
+
+
+## arframe Pipeline
+
+```{r}
+#| label: pipeline
+#| eval: false
+ae_rel_wide |>
+  fr_table() |>
+  fr_titles(
+    "Table 14.3.1",
+    "Treatment-Emergent Adverse Events Related to Study Drug",
+    "by System Organ Class and Preferred Term",
+    "Safety Population"
+  ) |>
+  fr_cols(
+    soc      = fr_col(visible = FALSE),
+    pt       = fr_col("System Organ Class\n  Preferred Term", width = 3.5),
+    row_type = fr_col(visible = FALSE),
+    !!!setNames(
+      lapply(arm_levels, function(a) fr_col(a, align = "decimal")),
+      arm_levels
+    ),
+    Total = fr_col("Total", align = "decimal"),
+    .n = n_vec
+  ) |>
+  fr_header(bold = TRUE, align = "center") |>
+  fr_rows(group_by = "soc", indent_by = "pt") |>
+  fr_styles(
+    fr_row_style(rows = fr_rows_matches("row_type", value = "soc"), bold = TRUE),
+    fr_row_style(rows = fr_rows_matches("row_type", value = "overall"), bold = TRUE)
+  ) |>
+  fr_footnotes(
+    "Related = Investigator-assessed relationship of Possible or Probable.",
+    "Subjects counted once per SOC and once per PT.",
+    "Percentages based on N per treatment arm (Safety Population).",
+    "SOC sorted by descending frequency; PT sorted within SOC by descending frequency."
+  )
+```
+
+
+## Rendered Table
+
+```{r}
+#| label: table
+#| echo: false
+#| ref.label: pipeline
+```

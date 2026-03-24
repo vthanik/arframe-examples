@@ -50,6 +50,8 @@ website:
           - text: "---"
           - text: "Safety"
           - tables/ae-soc-pt.qmd
+          - tables/ae-related.qmd
+          - tables/ae-common.qmd
           - tables/ae-grade.qmd
           - tables/ae-overall.qmd
           - tables/ae-event-counts.qmd
@@ -66,6 +68,7 @@ website:
           - tables/ecg-summary.qmd
           - text: "---"
           - text: "Efficacy"
+          - tables/tte-summary.qmd
           - tables/efficacy-bor.qmd
       - text: "---"
       - section: "Listings"

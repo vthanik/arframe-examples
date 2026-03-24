@@ -1,0 +1,184 @@
+---
+title: "Common Adverse Events"
+subtitle: "Treatment-Emergent AEs Occurring in ≥5% of Any Treatment Arm"
+execute:
+  echo: true
+  eval: true
+---
+
+
+```{r}
+#| label: prereqs
+#| include: false
+library(arframe)
+fr_theme(hlines = "header", font_family = "Courier New")
+
+blank_to_na <- function(df) {
+  df[] <- lapply(df, function(x) {
+    if (is.character(x)) x[x == ""] <- NA_character_
+    x
+  })
+  df
+}
+```
+
+## Setup
+
+See [Prerequisites](../install.qmd) for installation instructions.
+
+```{r}
+#| label: setup
+library(arframe)
+library(pharmaverseadam)
+library(dplyr, warn.conflicts = FALSE)
+library(tidyr)
+library(cards)
+
+adsl_saf <- pharmaverseadam::adsl |>
+  blank_to_na() |>
+  filter(SAFFL == "Y", TRT01A != "Screen Failure")
+
+adae_teae <- pharmaverseadam::adae |>
+  blank_to_na() |>
+  filter(SAFFL == "Y", TRTEMFL == "Y")
+
+arm_levels <- c("Placebo", "Xanomeline Low Dose", "Xanomeline High Dose")
+arm_n <- adsl_saf |>
+  filter(TRT01A %in% arm_levels) |>
+  count(TRT01A) |> pull(n, name = TRT01A)
+arm_n <- arm_n[arm_levels]
+N_total <- nrow(adsl_saf)
+n_vec <- c(arm_n, Total = N_total)
+
+threshold <- 5  # ≥5% in any arm
+```
+
+
+## Data Preparation
+
+::: {.panel-tabset}
+
+### dplyr
+
+```{r}
+#| label: dplyr-code
+
+n_pct <- function(n, denom) sprintf("%d (%.1f)", n, n / denom * 100)
+
+# ── Subject-level PT counts per arm ──
+pt_counts <- adae_teae |>
+  filter(TRT01A %in% arm_levels) |>
+  distinct(USUBJID, TRT01A, AEDECOD) |>
+  count(TRT01A, AEDECOD, name = "n_subj") |>
+  mutate(pct = n_subj / arm_n[TRT01A] * 100)
+
+# ── Filter PTs meeting threshold in any arm ──
+common_pts <- pt_counts |>
+  group_by(AEDECOD) |>
+  filter(any(pct >= threshold)) |>
+  ungroup()
+
+# ── Pivot to wide ──
+common_wide <- common_pts |>
+  mutate(value = n_pct(n_subj, arm_n[TRT01A])) |>
+  select(TRT01A, AEDECOD, value) |>
+  pivot_wider(names_from = TRT01A, values_from = value)
+
+# ── Add Total column ──
+pt_total <- adae_teae |>
+  distinct(USUBJID, AEDECOD) |>
+  count(AEDECOD) |>
+  mutate(Total = n_pct(n, N_total)) |>
+  select(AEDECOD, Total)
+
+common_wide <- left_join(common_wide, pt_total, by = "AEDECOD")
+
+# ── Sort by max frequency across arms (descending) ──
+sort_key <- common_pts |>
+  group_by(AEDECOD) |>
+  summarise(max_pct = max(pct), .groups = "drop") |>
+  arrange(desc(max_pct))
+
+ae_common_wide <- common_wide |>
+  mutate(stat_label = AEDECOD) |>
+  select(-AEDECOD) |>
+  slice(match(sort_key$AEDECOD, stat_label)) |>
+  mutate(across(all_of(c(arm_levels, "Total")),
+                ~ replace_na(.x, "0 (0.0)")))
+```
+
+### cards
+
+```{r}
+#| label: cards-code
+
+# Use ard_stack_hierarchical for flat PT list (no SOC grouping)
+common_ard <- ard_stack_hierarchical(
+  data        = adae_teae,
+  variables   = AEDECOD,
+  by          = TRT01A,
+  denominator = adsl_saf,
+  id          = USUBJID,
+  overall     = TRUE,
+  over_variables = TRUE
+) |>
+  sort_ard_hierarchical(sort = "descending")
+
+ae_common_cards <- fr_wide_ard(
+  common_ard,
+  statistic = "{n} ({p}%)",
+  decimals  = c(p = 1)
+)
+
+# Filter to PTs meeting threshold in any arm
+if (nrow(ae_common_cards) > 0) {
+  pct_cols <- intersect(c(arm_levels, "Total"), names(ae_common_cards))
+  ae_common_cards <- ae_common_cards |>
+    filter(if_any(all_of(pct_cols), function(x) {
+      nums <- suppressWarnings(as.numeric(gsub(".*\\(([0-9.]+)\\).*", "\\1", x)))
+      !is.na(nums) & nums >= threshold
+    }))
+}
+```
+
+:::
+
+
+## arframe Pipeline
+
+```{r}
+#| label: pipeline
+#| eval: false
+ae_common_wide |>
+  fr_table() |>
+  fr_titles(
+    "Table 14.3.1",
+    sprintf("Patients With Common Adverse Events Occurring at %s%% Frequency", "\u2265"),
+    "Safety Population"
+  ) |>
+  fr_cols(
+    stat_label = fr_col("Preferred Term", width = 3.0),
+    !!!setNames(
+      lapply(arm_levels, function(a) fr_col(a, align = "decimal")),
+      arm_levels
+    ),
+    Total = fr_col("Total", align = "decimal"),
+    .n = n_vec
+  ) |>
+  fr_header(bold = TRUE, align = "center") |>
+  fr_footnotes(
+    sprintf("Includes preferred terms occurring in %s5%% of subjects in any treatment arm.", "\u2265"),
+    "Subjects counted once per preferred term.",
+    "Percentages based on N per treatment arm (Safety Population).",
+    "Table sorted by descending maximum frequency across arms."
+  )
+```
+
+
+## Rendered Table
+
+```{r}
+#| label: table
+#| echo: false
+#| ref.label: pipeline
+```

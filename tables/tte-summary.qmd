@@ -1,0 +1,211 @@
+---
+title: "Time to Event Summary"
+subtitle: "Time to Event Analysis with Kaplan-Meier Estimates"
+execute:
+  echo: true
+  eval: true
+---
+
+
+```{r}
+#| label: prereqs
+#| include: false
+library(arframe)
+fr_theme(hlines = "header", font_family = "Courier New")
+
+blank_to_na <- function(df) {
+  df[] <- lapply(df, function(x) {
+    if (is.character(x)) x[x == ""] <- NA_character_
+    x
+  })
+  df
+}
+```
+
+## Setup
+
+See [Prerequisites](../install.qmd) for installation instructions.
+
+```{r}
+#| label: setup
+library(arframe)
+library(pharmaverseadam)
+library(dplyr, warn.conflicts = FALSE)
+library(tidyr)
+library(survival)
+
+adtte <- pharmaverseadam::adtte_onco |>
+  blank_to_na() |>
+  filter(PARAMCD == "OS", ARM %in% c("Xanomeline High Dose", "Placebo"))
+
+arm_levels <- c("Xanomeline High Dose", "Placebo")
+arm_n <- adtte |>
+  count(ARM) |> pull(n, name = ARM)
+arm_n <- arm_n[arm_levels]
+```
+
+
+## Data Preparation
+
+```{r}
+#| label: data-prep
+
+n_pct <- function(n, N) sprintf("%d (%.1f)", n, n / N * 100)
+
+# ── Events and Censoring ──
+events_by_arm <- adtte |>
+  group_by(ARM) |>
+  summarise(
+    n_events   = sum(CNSR == 0),
+    n_censored = sum(CNSR == 1),
+    N          = n(),
+    .groups    = "drop"
+  )
+
+events_row <- tibble(
+  category   = "",
+  stat_label = "Events (n (%))"
+) |> bind_cols(
+  events_by_arm |>
+    mutate(value = n_pct(n_events, N)) |>
+    select(ARM, value) |>
+    pivot_wider(names_from = ARM, values_from = value)
+)
+
+censored_row <- tibble(
+  category   = "",
+  stat_label = "Censored (n (%))"
+) |> bind_cols(
+  events_by_arm |>
+    mutate(value = n_pct(n_censored, N)) |>
+    select(ARM, value) |>
+    pivot_wider(names_from = ARM, values_from = value)
+)
+
+# ── Kaplan-Meier estimates ──
+km_fit <- survfit(Surv(AVAL, 1 - CNSR) ~ ARM, data = adtte)
+km_summary <- summary(km_fit)
+
+# Extract median and quartiles per arm
+km_stats <- lapply(arm_levels, function(a) {
+  arm_data <- adtte |> filter(ARM == a)
+  fit_arm  <- survfit(Surv(AVAL, 1 - CNSR) ~ 1, data = arm_data)
+  q_fit    <- quantile(fit_arm, probs = c(0.25, 0.50, 0.75))
+
+  tibble(
+    ARM = a,
+    q25    = q_fit$quantile[1],
+    median = q_fit$quantile[2],
+    q75    = q_fit$quantile[3]
+  )
+}) |> bind_rows()
+
+fmt_ci <- function(est, lower, upper) {
+  if (is.na(est)) return("NE")
+  sprintf("%.1f", est)
+}
+
+km_rows <- bind_rows(
+  tibble(category = "Time to Event (months)", stat_label = "Median") |>
+    bind_cols(
+      km_stats |>
+        mutate(value = vapply(median, function(x)
+          if (is.na(x)) "NE" else sprintf("%.1f", x), character(1))) |>
+        select(ARM, value) |>
+        pivot_wider(names_from = ARM, values_from = value)
+    ),
+  tibble(category = "Time to Event (months)", stat_label = "25th Percentile") |>
+    bind_cols(
+      km_stats |>
+        mutate(value = vapply(q25, function(x)
+          if (is.na(x)) "NE" else sprintf("%.1f", x), character(1))) |>
+        select(ARM, value) |>
+        pivot_wider(names_from = ARM, values_from = value)
+    ),
+  tibble(category = "Time to Event (months)", stat_label = "75th Percentile") |>
+    bind_cols(
+      km_stats |>
+        mutate(value = vapply(q75, function(x)
+          if (is.na(x)) "NE" else sprintf("%.1f", x), character(1))) |>
+        select(ARM, value) |>
+        pivot_wider(names_from = ARM, values_from = value)
+    )
+)
+
+# ── Cox PH: Hazard Ratio ──
+cox_fit <- coxph(Surv(AVAL, 1 - CNSR) ~ ARM, data = adtte)
+cox_sum <- summary(cox_fit)
+hr      <- cox_sum$conf.int[1, 1]
+hr_lo   <- cox_sum$conf.int[1, 3]
+hr_hi   <- cox_sum$conf.int[1, 4]
+
+# ── Log-rank test ──
+lr_test <- survdiff(Surv(AVAL, 1 - CNSR) ~ ARM, data = adtte)
+lr_pval <- 1 - pchisq(lr_test$chisq, df = 1)
+
+hr_row <- tibble(
+  category   = "Comparison",
+  stat_label = "Hazard Ratio (95% CI)",
+  !!arm_levels[1] := sprintf("%.3f (%.3f, %.3f)", hr, hr_lo, hr_hi),
+  !!arm_levels[2] := ""
+)
+
+pval_row <- tibble(
+  category   = "Comparison",
+  stat_label = "Log-Rank p-value",
+  !!arm_levels[1] := if (lr_pval < 0.001) "<0.001" else sprintf("%.3f", lr_pval),
+  !!arm_levels[2] := ""
+)
+
+# ── Combine ──
+tte_wide <- bind_rows(events_row, censored_row, km_rows, hr_row, pval_row) |>
+  mutate(across(all_of(arm_levels), ~ replace_na(.x, "")))
+```
+
+
+## arframe Pipeline
+
+```{r}
+#| label: pipeline
+#| eval: false
+tte_wide |>
+  fr_table() |>
+  fr_titles(
+    "Table 14.2.1",
+    "Time to Event — Overall Survival",
+    "ITT Population"
+  ) |>
+  fr_cols(
+    category   = fr_col(visible = FALSE),
+    stat_label = fr_col("Parameter", width = 2.5),
+    !!!setNames(
+      lapply(arm_levels, function(a) fr_col(a, align = "decimal")),
+      arm_levels
+    ),
+    .n = arm_n
+  ) |>
+  fr_header(bold = TRUE, align = "center") |>
+  fr_rows(
+    group_by    = list(cols = "category", label = "stat_label"),
+    blank_after = "category"
+  ) |>
+  fr_styles(
+    fr_row_style(rows = which(tte_wide$stat_label %in%
+      c("Hazard Ratio (95% CI)", "Log-Rank p-value")), bold = TRUE)
+  ) |>
+  fr_footnotes(
+    "NE = Not Estimable (fewer than required events reached).",
+    "Hazard Ratio: Drug X vs Placebo from Cox proportional hazards model.",
+    "p-value from unstratified log-rank test.",
+    "CDISCPILOT01 Oncology Extension — Overall Survival."
+  )
+```
+
+
+## Rendered Table
+
+```{r}
+#| label: table
+#| echo: false
+#| ref.label: pipeline
+```

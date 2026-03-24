@@ -56,6 +56,28 @@ install.packages(c("ggplot2", "survival", "broom", "scales", "patchwork"))
 ```
 
 
+## Utility: blank_to_na
+
+The `pharmaverseadam` datasets contain SAS-style blank strings (`""`) that should be `NA` in R. Every example in this gallery uses this helper to convert them:
+
+```r
+blank_to_na <- function(df) {
+  df[] <- lapply(df, function(x) {
+    if (is.character(x)) x[x == ""] <- NA_character_
+    x
+  })
+  df
+}
+
+# Usage
+adsl_saf <- pharmaverseadam::adsl |>
+  blank_to_na() |>
+  dplyr::filter(SAFFL == "Y", TRT01A != "Screen Failure")
+```
+
+This is included automatically in the hidden prerequisites of each example page.
+
+
 ## Verify Your Installation
 
 ```{r}
