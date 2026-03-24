@@ -14,3 +14,11 @@ docs/
 /.quarto/
 **/*.quarto_ipynb
 *.png
+
+# Claude Code config (local only)
+.claude/
+.claudeignore
+CLAUDE.md
+
+# Local scripts
+deploy-site.sh
