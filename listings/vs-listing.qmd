@@ -87,7 +87,7 @@ vs_listing |>
     CHG_C   = fr_col("Change from\nBaseline", width = 1.0, align = "decimal")
   ) |>
   fr_header(bold = TRUE, align = "center") |>
-  fr_rows(page_by = "PARAMCD", sort_by = c("USUBJID", "AVISIT"), repeat_cols = "USUBJID") |>
+  fr_rows(page_by = "PARAMCD", sort_by = c("USUBJID", "AVISIT"), suppress = "USUBJID") |>
   fr_footnotes(
     "On-treatment records: ONTRTFL = 'Y'. Derived records (DTYPE non-missing) are excluded.",
     "Value, Baseline, and Change from Baseline are in original units (VSSTRESU).",

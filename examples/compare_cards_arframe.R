@@ -139,7 +139,7 @@ demog_spec <- demog_wide |>
       Total                  = n_total
     )
   ) |>
-  fr_rows(group_by = "variable", group_label = "stat_label", group_bold = TRUE) |>
+  fr_rows(group_by = list(cols = "variable", label = "stat_label")) |>
   fr_footnotes("Percentages based on N per treatment group.")
 
 demog_pdf <- file.path(outdir, "demog.pdf")
@@ -280,9 +280,7 @@ subgrp_spec <- subgrp_wide |>
   ) |>
   fr_rows(
     page_by = "SEX",
-    group_by = "variable",
-    group_label = "stat_label",
-    group_bold = TRUE
+    group_by = list(cols = "variable", label = "stat_label")
   ) |>
   fr_footnotes("Each sex subgroup on a separate page.")
 

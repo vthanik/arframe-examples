@@ -170,9 +170,7 @@ demog_wide |>
   ) |>
   fr_header(bold = TRUE, align = "center") |>
   fr_rows(
-    group_by = "variable",
-    group_label = "stat_label",
-    group_bold = TRUE,
+    group_by = list(cols = "variable", label = "stat_label"),
     blank_after = "variable"
   ) |>
   fr_footnotes(

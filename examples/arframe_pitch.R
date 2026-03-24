@@ -130,7 +130,7 @@ wide_spec <- vs_sysbp |>
     .split = TRUE,
     .n = arm_n
   ) |>
-  fr_rows(group_by = "AVISIT", group_bold = TRUE, blank_after = "AVISIT") |>
+  fr_rows(group_by = "AVISIT", blank_after = "AVISIT") |>
   fr_footnotes(
     "SD = Standard Deviation. CFB = Change from Baseline.",
     "Column panels created automatically — stub repeats on each panel."
@@ -205,7 +205,7 @@ page_by_spec <- vs_stats |>
     `Xanomeline High Dose` = fr_col("Xan\nHigh Dose", align = "decimal"),
     .n = vs_n_vec
   ) |>
-  fr_rows(page_by = "PARAM", group_by = "AVISIT", group_bold = TRUE, blank_after = "AVISIT") |>
+  fr_rows(page_by = "PARAM", group_by = "AVISIT", blank_after = "AVISIT") |>
   fr_spans(
     "Placebo"              = "Placebo",
     "Xanomeline Low Dose"  = "Xanomeline Low Dose",
@@ -272,7 +272,7 @@ decimal_spec <- demog_wide |>
     Total = fr_col("Total", align = "decimal"),
     .n = c(arm_n, Total = sum(arm_n))
   ) |>
-  fr_rows(group_by = "variable", group_label = "stat_label", group_bold = TRUE, blank_after = "variable") |>
+  fr_rows(group_by = list(cols = "variable", label = "stat_label"), blank_after = "variable") |>
   fr_footnotes(
     "align = 'decimal' keeps numbers visually aligned.",
     "gt/tfrmt can only do left/center/right alignment."
@@ -377,7 +377,7 @@ tables <- list(
       Total = fr_col("Total", align = "decimal"),
       .n = c(arm_n, Total = sum(arm_n))
     ) |>
-    fr_rows(group_by = "variable", group_label = "stat_label", group_bold = TRUE, blank_after = "variable") |>
+    fr_rows(group_by = list(cols = "variable", label = "stat_label"), blank_after = "variable") |>
     fr_footnotes("Percentages based on N per treatment group."),
 
   "Table_14_3_1" = ae_spec

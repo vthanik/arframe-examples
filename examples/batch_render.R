@@ -186,7 +186,7 @@ col_defs <- list(
         Total = list(label = "Total", align = "decimal")
       )
     ),
-    group_label = "stat_label"
+    label_col = "stat_label"
   ),
   ae_wide = list(
     cols = c(
@@ -197,7 +197,7 @@ col_defs <- list(
       ),
       make_arm_cols(arm_cols)
     ),
-    group_label = "pt"
+    label_col = "pt"
   )
 )
 
@@ -243,11 +243,14 @@ build_table_from_manifest <- function(row, col_defs, n_pools) {
   col_args <- c(list(spec = spec), fr_cols_list, list(.n = n_vec))
   spec <- do.call(fr_cols, col_args)
 
-  # Row organization — use group_label from col_defs metadata
-  grp_label <- col_defs[[row$dataset]]$group_label
+  # Row organization — use label_col from col_defs metadata
+  label_col <- col_defs[[row$dataset]]$label_col
   if (!is.na(row$group_by)) {
-    row_args <- list(spec = spec, group_by = row$group_by, group_label = grp_label,
-                     group_bold = TRUE)
+    if (!is.null(label_col)) {
+      row_args <- list(spec = spec, group_by = list(cols = row$group_by, label = label_col))
+    } else {
+      row_args <- list(spec = spec, group_by = row$group_by)
+    }
     if (!is.na(row$indent_by))   row_args$indent_by   <- row$indent_by
     if (!is.na(row$blank_after)) row_args$blank_after  <- row$blank_after
     spec <- do.call(fr_rows, row_args)
@@ -326,9 +329,7 @@ table_registry <- list(
         .n = n_safety
       ) |>
       fr_rows(
-        group_by    = "variable",
-        group_label = "stat_label",
-        group_bold  = TRUE,
+        group_by    = list(cols = "variable", label = "stat_label"),
         blank_after = "variable"
       ) |>
       fr_footnotes(
@@ -360,8 +361,7 @@ table_registry <- list(
         .n = arm_n
       ) |>
       fr_rows(
-        group_by    = "soc",
-        group_label = "pt",
+        group_by    = list(cols = "soc", label = "pt"),
         indent_by   = "pt"
       ) |>
       fr_styles(

@@ -87,7 +87,7 @@ ae_listing |>
     AEREL    = fr_col("Relationship\nto Study Drug", width = 1.3)
   ) |>
   fr_header(bold = TRUE, align = "center") |>
-  fr_rows(page_by = "TRT01A", sort_by = c("USUBJID", "AEBODSYS", "AEDECOD"), repeat_cols = "USUBJID") |>
+  fr_rows(page_by = "TRT01A", sort_by = c("USUBJID", "AEBODSYS", "AEDECOD"), suppress = "USUBJID") |>
   fr_footnotes(
     "TEAE = Treatment-Emergent Adverse Event: onset on or after first dose date.",
     "Outcome: RECOVERED/RESOLVED, RECOVERING/RESOLVING, NOT RECOVERED/NOT RESOLVED, FATAL, UNKNOWN.",

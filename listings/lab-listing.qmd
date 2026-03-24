@@ -88,7 +88,7 @@ lab_listing |>
     ANRIND  = fr_col("Normal\nRange Flag", width = 1.0, align = "center")
   ) |>
   fr_header(bold = TRUE, align = "center") |>
-  fr_rows(page_by = "TRT01A", sort_by = c("USUBJID", "PARAM", "AVISIT"), repeat_cols = c("USUBJID", "PARAM")) |>
+  fr_rows(page_by = "TRT01A", sort_by = c("USUBJID", "PARAM", "AVISIT"), suppress = c("USUBJID", "PARAM")) |>
   fr_footnotes(
     "Safety Population: all randomised subjects who received at least one dose of study medication.",
     "Parameters: ALT = Alanine Aminotransferase, AST = Aspartate Aminotransferase, BILI = Bilirubin, CREAT = Creatinine.",

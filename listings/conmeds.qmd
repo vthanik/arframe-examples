@@ -94,7 +94,7 @@ cm_listing |>
     CMROUTE     = fr_col("Route",            width = 0.9, align = "center")
   ) |>
   fr_header(bold = TRUE, align = "center") |>
-  fr_rows(page_by = "TRT01A", sort_by = c("USUBJID", "CMTRT"), repeat_cols = "USUBJID") |>
+  fr_rows(page_by = "TRT01A", sort_by = c("USUBJID", "CMTRT"), suppress = "USUBJID") |>
   fr_footnotes(
     "On-treatment concomitant medications (ONTRTFL = 'Y').",
     "Coded name from CMDECOD (WHO Drug); ATC class from CMCLAS.",

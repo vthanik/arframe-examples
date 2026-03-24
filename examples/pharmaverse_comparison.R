@@ -8,7 +8,7 @@
 #   Path B: arframe (cards + fr_wide_ard + fr_table pipeline)
 #
 # Tables:
-#   1. Demographics (Table 14.1.1) — group_by + group_bold + blank_after
+#   1. Demographics (Table 14.1.1) — group_by + blank_after
 #   2. AE by SOC/PT (Table 14.3.1) — hierarchical + indent + bold rows
 #   3. Vital Signs (Table 14.3.6) — page_by parameter, baseline/change,
 #      wide column split, per-page N-counts
@@ -81,7 +81,7 @@ arm_levels <- names(arm_n)
 
 # ╔══════════════════════════════════════════════════════════════════════════╗
 # ║  TABLE 1: Demographics and Baseline Characteristics                    ║
-# ║  Features: group_by, group_bold, blank_after, decimal alignment        ║
+# ║  Features: group_by, blank_after, decimal alignment                    ║
 # ╚══════════════════════════════════════════════════════════════════════════╝
 
 cat("\n================================================================\n")
@@ -218,9 +218,7 @@ demog_spec <- demog_wide |>
     .n = c(arm_n, Total = sum(arm_n))
   ) |>
   fr_rows(
-    group_by = "variable",
-    group_label = "stat_label",
-    group_bold = TRUE,
+    group_by = list(cols = "variable", label = "stat_label"),
     blank_after = "variable"
   ) |>
   fr_footnotes(
@@ -319,7 +317,7 @@ ae_spec <- ae_wide |>
     ),
     .n = arm_n
   ) |>
-  fr_rows(group_by = "soc", group_label = "pt", indent_by = "pt") |>
+  fr_rows(group_by = list(cols = "soc", label = "pt"), indent_by = "pt") |>
   fr_styles(
     fr_row_style(rows = fr_rows_matches("row_type", value = "soc"), bold = TRUE)
   ) |>
@@ -479,7 +477,6 @@ vs_spec <- vs_long |>
   fr_rows(
     page_by = "PARAM",
     group_by = "AVISIT",
-    group_bold = TRUE,
     blank_after = "AVISIT"
   ) |>
   fr_footnotes(

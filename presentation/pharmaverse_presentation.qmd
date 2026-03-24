@@ -2,9 +2,9 @@
 title: "Streamlining the TFL Pipeline"
 subtitle: "Solving high-friction rendering challenges with arframe"
 author: ""
-format: 
-  revealjs:
-    theme: [clean, custom.scss]
+format:
+  clean-revealjs:
+    theme: default
     slide-number: true
     preview-links: auto
     view-distance: 10

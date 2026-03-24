@@ -243,9 +243,7 @@ ecg_wide |>
   ) |>
   fr_header(bold = TRUE, align = "center") |>
   fr_rows(
-    group_by    = "section",
-    group_label = "category",
-    group_bold  = TRUE,
+    group_by    = list(cols = "section", label = "category"),
     blank_after = "section"
   ) |>
   fr_footnotes(

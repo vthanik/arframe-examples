@@ -202,9 +202,7 @@ disp_wide |>
   ) |>
   fr_header(bold = TRUE, align = "center") |>
   fr_rows(
-    group_by    = "category",
-    group_label = "stat_label",
-    group_bold  = TRUE,
+    group_by    = list(cols = "category", label = "stat_label"),
     blank_after = "category"
   ) |>
   fr_styles(fr_row_style(rows = bold_rows, bold = TRUE)) |>

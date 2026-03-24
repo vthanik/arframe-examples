@@ -225,9 +225,7 @@ demog_spec <- demog_wide |>
     .n = c(arm_n, Total = sum(arm_n))
   ) |>
   fr_rows(
-    group_by = "variable",
-    group_label = "stat_label",
-    group_bold = TRUE,
+    group_by = list(cols = "variable", label = "stat_label"),
     blank_after = "variable"
   ) |>
   fr_footnotes(
@@ -294,7 +292,7 @@ ae_spec <- ae_wide |>
     ),
     .n = arm_n
   ) |>
-  fr_rows(group_by = "soc", group_label = "pt", indent_by = "pt") |>
+  fr_rows(group_by = list(cols = "soc", label = "pt"), indent_by = "pt") |>
   fr_styles(
     fr_row_style(rows = fr_rows_matches("row_type", value = "soc"), bold = TRUE)
   ) |>
@@ -414,7 +412,6 @@ vs_spec <- vs_long |>
   fr_rows(
     page_by = "PARAM",
     group_by = "AVISIT",
-    group_bold = TRUE,
     blank_after = "AVISIT"
   ) |>
   fr_footnotes(
@@ -458,9 +455,7 @@ wide_spec <- wide_8arm |>
     .split = TRUE
   ) |>
   fr_rows(
-    group_by = "variable",
-    group_label = "stat_label",
-    group_bold = TRUE,
+    group_by = list(cols = "variable", label = "stat_label"),
     blank_after = "variable"
   )
 

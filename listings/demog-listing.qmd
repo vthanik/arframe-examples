@@ -71,7 +71,7 @@ demog_listing |>
     ETHNIC  = fr_col("Ethnicity",   width = 1.8)
   ) |>
   fr_header(bold = TRUE, align = "center") |>
-  fr_rows(page_by = "TRT01A", sort_by = "USUBJID", repeat_cols = "USUBJID") |>
+  fr_rows(page_by = "TRT01A", sort_by = "USUBJID", suppress = "USUBJID") |>
   fr_footnotes(
     "Safety Population: all randomised subjects who received at least one dose of study medication.",
     "Sorted by treatment arm and subject identifier.",

@@ -78,7 +78,7 @@ mh_listing |>
     MHSEV    = fr_col("Severity",        width = 0.9, align = "center")
   ) |>
   fr_header(bold = TRUE, align = "center") |>
-  fr_rows(page_by = "TRT01A", sort_by = c("USUBJID", "MHBODSYS", "MHDECOD"), repeat_cols = "USUBJID") |>
+  fr_rows(page_by = "TRT01A", sort_by = c("USUBJID", "MHBODSYS", "MHDECOD"), suppress = "USUBJID") |>
   fr_footnotes(
     "Safety Population: all randomised subjects who received at least one dose of study medication.",
     "System Organ Class and Preferred Term are coded using MedDRA.",

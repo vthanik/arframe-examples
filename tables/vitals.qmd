@@ -194,7 +194,6 @@ vs_wide |>
   fr_header(bold = TRUE, align = "center") |>
   fr_rows(
     group_by    = "AVISIT",
-    group_bold  = TRUE,
     blank_after = "AVISIT",
     page_by     = "PARAM"
   ) |>

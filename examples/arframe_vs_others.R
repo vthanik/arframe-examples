@@ -147,7 +147,7 @@ demog_arframe <- demog_wide |>
     Total = fr_col("Total", align = "decimal"),
     .n = n_vec
   ) |>
-  fr_rows(group_by = "variable", group_label = "stat_label", group_bold = TRUE) |>
+  fr_rows(group_by = list(cols = "variable", label = "stat_label")) |>
   fr_footnotes("Percentages based on N per treatment group.")
 
 demog_arframe |> fr_render(file.path(tempdir(), "arframe_demog.pdf"))
@@ -578,7 +578,7 @@ scoreboard <- data.frame(
     "  Data format required",
     "  Decimal alignment",
     "  N-counts in headers",
-    "  Group label bold",
+    "  Group label bold (via fr_styles)",
     "  Output formats",
     "",
     "AE SOC/PT table",
@@ -602,7 +602,7 @@ scoreboard <- data.frame(
   ),
   arframe = c(
     "",
-    "~20", "1", "Wide summary", "YES", "Automatic", "group_bold = TRUE",
+    "~20", "1", "Wide summary", "YES", "Automatic", "fr_styles()",
     "PDF + RTF + HTML",
     "",
     "",
