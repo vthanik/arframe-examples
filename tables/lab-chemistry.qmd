@@ -12,6 +12,13 @@ execute:
 #| include: false
 library(arframe)
 fr_theme(hlines = "header", font_family = "Courier New")
+blank_to_na <- function(df) {
+  df[] <- lapply(df, function(x) {
+    if (is.character(x)) x[x == ""] <- NA_character_
+    x
+  })
+  df
+}
 ```
 
 ## Setup
@@ -25,14 +32,6 @@ library(pharmaverseadam)
 library(dplyr, warn.conflicts = FALSE)
 library(tidyr)
 library(cards)
-
-blank_to_na <- function(df) {
-  df[] <- lapply(df, function(x) {
-    if (is.character(x)) x[x == ""] <- NA_character_
-    x
-  })
-  df
-}
 
 # Chemistry panel — 6 key parameters
 param_subset <- c("ALT", "AST", "BILI", "CREAT", "GLUC", "SODIUM")

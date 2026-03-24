@@ -12,6 +12,13 @@ execute:
 #| include: false
 library(arframe)
 fr_theme(hlines = "header", font_family = "Courier New")
+blank_to_na <- function(df) {
+  df[] <- lapply(df, function(x) {
+    if (is.character(x)) x[x == ""] <- NA_character_
+    x
+  })
+  df
+}
 ```
 
 ## Setup
@@ -23,14 +30,6 @@ See [Prerequisites](../install.qmd) for installation instructions.
 library(arframe)
 library(pharmaverseadam)
 library(dplyr, warn.conflicts = FALSE)
-
-blank_to_na <- function(df) {
-  df[] <- lapply(df, function(x) {
-    if (is.character(x)) x[x == ""] <- NA_character_
-    x
-  })
-  df
-}
 
 adsl <- pharmaverseadam::adsl |> blank_to_na()
 ```
