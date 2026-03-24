@@ -47,7 +47,8 @@ adlb_chem <- pharmaverseadam::adlb |>
     TRT01A  != "Screen Failure",
     PARCAT1 == "CHEMISTRY",
     ANL01FL == "Y"
-  )
+  ) |>
+  mutate(ANRIND = factor(ANRIND, levels = c("LOW", "NORMAL", "HIGH")))
 
 arm_levels <- c("Placebo", "Xanomeline Low Dose", "Xanomeline High Dose")
 
