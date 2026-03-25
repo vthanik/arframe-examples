@@ -192,7 +192,6 @@ lab_wide |>
     page_by     = "PARAM",
     group_style = list(bold = TRUE)
   ) |>
-  fr_page() |>
   fr_footnotes(
     "N is the number of subjects in the Safety Population per treatment group.",
     "Statistics: n = number of non-missing observations, SD = Standard Deviation.",

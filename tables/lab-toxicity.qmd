@@ -253,7 +253,6 @@ tox_wide |>
       bold = TRUE
     )
   ) |>
-  fr_page() |>
   fr_footnotes(
     "Worst post-baseline toxicity grade is the maximum absolute toxicity grade (|ATOXGR|) recorded after baseline.",
     "Grade 0 = no abnormality or within normal limits; Grades 1-3 = increasing severity.",

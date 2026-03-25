@@ -260,7 +260,6 @@ shift_wide |>
   ) |>
   fr_header(bold = TRUE, align = "center") |>
   fr_rows(page_by = "PARAM") |>
-  fr_page() |>
   fr_footnotes(
     "Worst post-baseline is the most extreme reference range indicator (High or Low) recorded after baseline; Normal if no abnormal values observed.",
     "Denominator for percentages is the number of subjects with the specified baseline reference range category.",

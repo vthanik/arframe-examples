@@ -197,7 +197,6 @@ vs_wide |>
     page_by     = "PARAM",
     group_style = list(bold = TRUE)
   ) |>
-  fr_page() |>
   fr_footnotes(
     "Value = observed value at visit; Change = post-baseline value minus baseline.",
     "SD = Standard Deviation.",
