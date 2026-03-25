@@ -41,8 +41,6 @@ website:
           - tables/medical-history.qmd
           - tables/prior-medication.qmd
           - tables/disposition.qmd
-          - tables/disposition-screening.qmd
-          - tables/disposition-eos.qmd
           - tables/analysis-populations.qmd
           - text: "---"
           - text: "Extent of Exposure"
