@@ -246,7 +246,8 @@ ecg_wide |>
   fr_header(bold = TRUE, align = "center") |>
   fr_rows(
     group_by    = list(cols = "section", label = "category"),
-    blank_after = "section"
+    blank_after = "section",
+    group_style = list(bold = TRUE)
   ) |>
   fr_footnotes(
     "QTcF = QT interval corrected using Fridericia formula (PARAMCD = QTCFR).",

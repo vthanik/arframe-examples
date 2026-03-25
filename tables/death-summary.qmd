@@ -228,7 +228,8 @@ death_wide |>
   fr_header(bold = TRUE, align = "center") |>
   fr_rows(
     group_by    = list(cols = "category", label = "stat_label"),
-    blank_after = "category"
+    blank_after = "category",
+    group_style = list(bold = TRUE)
   ) |>
   fr_styles(
     fr_row_style(rows = which(death_wide$stat_label %in%

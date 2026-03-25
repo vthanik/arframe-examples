@@ -192,8 +192,9 @@ demog_wide |>
   ) |>
   fr_header(bold = TRUE, align = "center") |>
   fr_rows(
-    group_by = list(cols = "variable", label = "stat_label"),
-    blank_after = "variable"
+    group_by    = list(cols = "variable", label = "stat_label"),
+    blank_after = "variable",
+    group_style = list(bold = TRUE)
   ) |>
   fr_footnotes(
     "Percentages based on N per treatment group.",

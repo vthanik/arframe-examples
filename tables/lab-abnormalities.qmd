@@ -210,7 +210,8 @@ lab_wide |>
   fr_header(bold = TRUE, align = "center") |>
   fr_rows(
     group_by    = list(cols = "PARAMCD", label = "direction"),
-    blank_after = "PARAMCD"
+    blank_after = "PARAMCD",
+    group_style = list(bold = TRUE)
   ) |>
   fr_footnotes(
     "A subject is counted once per parameter and direction (High/Low) regardless of number of abnormal records.",

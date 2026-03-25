@@ -189,7 +189,8 @@ lab_wide |>
   fr_rows(
     group_by    = list(cols = "AVISIT", label = "stat_label"),
     blank_after = "AVISIT",
-    page_by     = "PARAM"
+    page_by     = "PARAM",
+    group_style = list(bold = TRUE)
   ) |>
   fr_page() |>
   fr_footnotes(
